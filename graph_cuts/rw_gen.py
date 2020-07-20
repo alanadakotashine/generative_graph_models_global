@@ -408,7 +408,7 @@ def num_nodes_in_cut(S,S_comp,walk):
 	walk_len = len(walk)
 	exited_cut = False
 	for i in range(walk_len):
-		v_i = w[i]
+		v_i = walk[i]
 		if v_i in S and walk_sign == -1:
 			exited_cut = True
 			break
@@ -568,12 +568,12 @@ def gen_freq_from_walks(A,walker1,walker2,num_iters,walk_params,data_path=None,f
 		(S,S_comp,walks) = gen_cut_from_walks(A,walker1,walker2,walk_params)
 		assert(len(S.intersection(S_comp)) == 0)
 		F, stats = matrix_update(A, S, S_comp, walk_params, F, num_iters, walks, stats, i, truth_spec)
-		if ((i+1)*batch_size) in num_iters: #record time
+		if ((i+1)*walk_params['bs']) in num_iters: #record time
 			if freq_path != None:
 				print('SAVING HERE')
 				sF = utils.normMatrix_wsum(F,A.sum())
-				np.savetxt(freq_path+'num_iters{}.txt'.format((i+1)*batch_size),sF)
-			times[(i+1)*batch_size] = time.time()-start
+				np.savetxt(freq_path+'num_iters{}.txt'.format((i+1)*walk_params['bs']),sF)
+			times[(i+1)*walk_params['bs']] = time.time()-start
 	if data_path !=None: #recording data
 		with open(data_path+"cuts.csv","w") as f:
 		    wr = csv.writer(f)
