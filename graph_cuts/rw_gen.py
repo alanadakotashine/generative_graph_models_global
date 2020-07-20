@@ -59,6 +59,22 @@ def gen_votes_cluster():
 			print('{} is seed node'.format(u))
 			print((u in S) or (u in S_comp))
 
+def matrix_update_barbell():
+	G = nx.barbell_graph(5,0)
+	A = nx.adjacency_matrix(G).todense()
+	S = set([0,1,2,3,4])
+	S_comp = set([5,6,7,8,9])
+	batch_size = 1
+	F = np.zeros((10,10))
+	params = {'bs':1,'walk_dist_weight':True,'zero_cross':False}
+	num_iters = [5]
+	walks = [[[2,4,5],[8,7,6],[3,1,2,3,4,5,6]]]
+	stats = defaultdict(list)
+	frequency_map = {}
+	truth_spec = utils.spectrum(A)
+	batch_num = 0
+	F, stats  = matrix_update(A, S, S_comp, params, F, num_iters, walks, stats, batch_num, truth_spec)
+
 
 
 '''UTILS'''
@@ -166,24 +182,27 @@ def gen_walk_config(alg):
 	return comp, config
 
 
-
-
-
 '''RANDOM WALK GEN'''
 
 def count_opp_walks(walker1,walker2,k,n):
 	'''For each node pair (u,v), count the number of times (u,v) appear
 	in opposite walks started from different points with walks terminated
-	once they collide.'''
+	once they collide our of k total walk pairs
+
+	Return counts 
+
+	Args:
+	walker1, walker2 : independent generators for walking on template graph 
+	k: number of pairs of walks 
+	n: number of nodes'''
 	counts = np.zeros((n,n))
 	for i in range(k):
 		#initialize walks in different places
 		walker1.set_current(range(n))
 		walker2.set_current(range(n))
-		while walker2.current_node == walker1.current_node:
+		while walker2.current_node == walker1.current_node: 
 			walker2.set_current(range(n))
-		#walks terminated once they collide.
-		(w1,w2) = gen_indep_walks(walker1, walker2)
+		(w1,w2) = gen_indep_walks(walker1, walker2) #walks terminated once they collide.
 		for u in w1:
 			for v in w2:
 				counts[u,v] = counts[u,v]+1
@@ -196,7 +215,13 @@ def gen_indep_walks(walker1, walker2):
 	two walks indpendently. All vertices on the first walk are 
 	in s1, all vertices in the second walk are in s2. Break once
 	the walks intersect.
-	Assumes walkers have two different current nodes.'''
+	Assumes walkers have two different current nodes.
+
+	Returns: Two lists of vertices hit by each walk 
+
+	Args:
+	walker1, walker2: independent generators for walking on template graph
+	'''
 	walk1 = walker1.walk_single
 	walk2 = walker2.walk_single
 	w1 = [walker1.current_node]
@@ -204,29 +229,32 @@ def gen_indep_walks(walker1, walker2):
 	s1 = set(w1)
 	s2 = set(w2)
 	while True:
-		assert(len(s1.intersection(s2))==0)
+		assert(len(s1.intersection(s2))==0) 
 		i1 = next(walk1())
 		i2 = next(walk2())
-		#return if the walks intersect at the same point or hit
-		#a node placed in s1 or s2
-		if i1 == i2:
+		if i1 == i2: #return if the walks intersect at the same point
 			return(w1,w2,s1,s2)
-		if i1 in s2:
+		if i1 in s2: #return if walk1 hits node hit by walk2
 			return (w1,w2,s1,s2)
-		if i2 in s1:
+		if i2 in s1: #return if walk2 hits node hi by walk1
 			return (w1,w2,s1,s2)
-		#else, add nodes visited to the walks and s1,s2
-		s1.add(i1)
+		s1.add(i1) #else, add nodes visited to the walks and s1,s2
 		s2.add(i2)
 		w1.append(i1)
 		w2.append(i2)
 
 
-
-
-
-
 def initialize_cuts(n,A,walker1,walker2,init_method,num_cut_init_walks=100):
+	'''Initializes independnet walks according to init_method runs walks until they intersect 
+
+	Returns two lists of vertices hit by each indpendent walk, vertex sets hit will be disjoint
+
+	Args:
+	n - int, number of vertices 
+	A - adjacency matrix of template graph 
+	walker1, walker2 - generators for walking on template graph 
+	init_method - how to initialize start vertices of walks, default is weighted by degree 
+	num_cut_init_walks - number of walks if initializing by counts (default = 100) '''
 	if init_method == 'eig':
 		'''Initialize walks on opposite sides of the convex combination of 
 		the eigenvectors corresponding to the five smallest non-zero eigenvaleus'''
@@ -258,55 +286,48 @@ def initialize_cuts(n,A,walker1,walker2,init_method,num_cut_init_walks=100):
 	assert(walker2.current_node != walker1.current_node)
 	return gen_indep_walks(walker1, walker2)
 
-def gen_votes(walker,S,S_comp,n,num_rounds = 1):
-	'''In each iteration, run a sequence of walks so each vertex is seen
-	at least once. For each vertex not in S or S_comp, we maintain
-	a pair of votes that it should belong to S or S_comp.
-	Votes correspond to the number of times a vertex is on walks that hit
-	S or S_comp first.'''
-	print('gen votes')
+def gen_votes(walker,S,S_comp,n,batch_size = 1):
+	'''Run a batch of walk algorithm iterations in which walks are run until walk hits a node 
+	in one of the disjoint sets of seed nodes. Keep track of the number of times (votes) each non-seed walk 
+	node hits each of the disjiont sets. 
+
+	Returns votes and a list of walks for each walk algorithm iteration
+
+	Args: 
+
+	walker: generator for walking on template graph 
+	S, S_comp: disjoint sets of seed nodes 
+	n: number of vertices 
+	batch_size: number of walk algorithm iterations to run '''
 	votes = np.zeros((n,2))
-	total_walks = [[]]*num_rounds
-	#S_first, S_comp_first partitions nodes based on the first walk
-	#it was on and which of S or S_comp the walk hit.
-	S_first = copy.deepcopy(S)
-	S_comp_first = copy.deepcopy(S_comp)
+	total_walks = [[]]*batch_size
 	partial_all = S.union(S_comp)
 	num_in_partial_all = len(partial_all)
 	placed_all_rounds = copy.deepcopy(partial_all)
 	max_walks = 1000
-	for round_num in range(num_rounds):
+	for batch_num in range(batch_size):
 		start = time.time()
 		walks_in_round = []
-		'''Start walks from unseen nodes'''
-		unseen_list = cut_walk_gen_utils.complement([S,S_comp],n)
+		unseen_list = cut_walk_gen_utils.complement([S,S_comp],n) #compute nodes not in seed sets
 		unseen = set(unseen_list)
 		num_placed = num_in_partial_all
-		walker.set_current(unseen_list)
+		walker.set_current(unseen_list) #set walker at unseen node
 		walk_gen = walker.walk_single
-		#initialize walk
 		w = [walker.current_node]
 		s = set(w)
-		#seen used to verify that nodes is either in S or S_comp, unseen
-		#or seen
 		seen = set()
-		while num_placed < n and len(walks_in_round) < max_walks:
-			'''Walk unti we hit the partial cut'''
+		while num_placed < n and len(walks_in_round) < max_walks: 
 			assert(len(partial_all) + len(seen) + len(unseen) == n)
 			i = next(walk_gen())
 			placed_all_rounds.add(i)
-			'''Once we hit, for each vertex on the walk, 
-			one vote for the side of the partial cut it hits first'''
-			if i in S:
+			if i in S: #walk until we hit a seed node
 				for u in w:
 					votes[u][0] = votes[u][0]+1
 			if i in S_comp:
 				assert(i not in S)
 				for u in w:
 					votes[u][1] = votes[u][1]+1
-			'''Record the walk, start over outside the nodes we have seen'''
-			if i in partial_all:
-				#move nodes in s from rest to seen
+			if i in partial_all: #if we hit a seed node, record walk
 				seen_before = len(seen)
 				num_new = 0
 				for v in s:
@@ -317,25 +338,30 @@ def gen_votes(walker,S,S_comp,n,num_rounds = 1):
 						num_new = num_new + 1
 				assert(len(seen) == (seen_before + num_new))
 				walks_in_round.append(w)
-				if num_placed < n:
+				if num_placed < n: #if still nodes that have not been seen, start a new walk
 					walker.set_current(list(unseen))
 					walk_gen = walker.walk_single
 					w = [walker.current_node]
 					s = set(w)
-			else:
-				#add i to s and w
+			else: #update walk and set
 				s.add(i)
 				w.append(i)
 		assert((num_placed == n) or (len(walks_in_round) == max_walks))
-		total_walks[round_num] = walks_in_round
+		total_walks[batch_num] = walks_in_round
 	return votes, total_walks
 
 
 def gen_cut_from_walks(A,walker1,walker2,walk_params,init_size_thresh = 5):
-	'''Generate cut using random walks. Initialize the cut by generating
-	two disjoint subsets of nodes S,S_comp. Remaining nodes will be merged with the subsets 
-	by labeling the nodes with S,S_comp based on random walks that contain the node. Set S
-	is the generated cut.
+	'''Generate cut using independent random walks. 
+
+	Returns bipartition of vertices (S, S_comp) and list of walks. 
+
+	Args:
+
+	A - Adjacency matrix of template graph.
+	walker1, walker2 - indpendent genertaors to walk on template graph.
+	walk_params - hyperparamater map 
+	init_size_thresh - minimum number of nodes to be seen by seed walks (default is 5)
 	'''
 	init_method = walk_params['init_method']
 	batch_size = walk_params['bs']
@@ -343,15 +369,14 @@ def gen_cut_from_walks(A,walker1,walker2,walk_params,init_size_thresh = 5):
 	n = A.shape[0]
 	S = set()
 	S_comp = set()
-	'''Cut initialization'''
-	while min(len(S),len(S_comp)) < init_size_thresh:
+
+	while min(len(S),len(S_comp)) < init_size_thresh: #seed walks
 		(w1,w2,S,S_comp) = initialize_cuts(n,A,walker1,walker2,init_method,num_cut_init_walks)
 	walks = []
 	nodes_to_label = cut_walk_gen_utils.complement([S,S_comp],n)
 	assert((len(S)+len(S_comp)+len(nodes_to_label))==n)
-	'''Cut construction. If nodes left to label, generate batch size number of walk algorithm 
-	iterations and use these collections of walks to vote'''
-	if len(nodes_to_label)>0:
+	
+	if len(nodes_to_label)>0: #if nodes left to label, vote by generating batch of votes
 		assert(len(S.intersection(S_comp))==0)
 		votes, walks = gen_votes(walker1,S,S_comp,n,batch_size)
 		for u in nodes_to_label:
@@ -359,7 +384,7 @@ def gen_cut_from_walks(A,walker1,walker2,walk_params,init_size_thresh = 5):
 				S.add(u)
 			else:
 				S_comp.add(u)
-	#making sure we found a cut
+
 	assert(len(S) + len(S_comp) == n)
 	assert(len(S.intersection(S_comp))==0)
 	if len(nodes_to_label) == 0:
@@ -368,20 +393,26 @@ def gen_cut_from_walks(A,walker1,walker2,walk_params,init_size_thresh = 5):
 		walks = [[w1]+[w2]+walks[i] for i in range(batch_size)]
 	return (S,S_comp,walks)
 
-def num_nodes_in_cut(S,S_comp,s):
-	'''Return the number of nodes before crossing cut'''
-	if s[0] in S:
+def num_nodes_in_cut(S,S_comp,walk):
+	'''Return number of nodes seen by walk before crossing cut (S, S_comp)
+
+	Args: 
+
+	S, S_comp - Disjoint sets of vertices (cut)
+	walk - list of vertices '''
+
+	if walk[0] in S:
 		walk_sign = 1
 	else:
 		walk_sign = -1
-	walk_len = len(s)
+	walk_len = len(walk)
 	exited_cut = False
 	for i in range(walk_len):
-		s_i = s[i]
-		if s_i in S and walk_sign == -1:
+		v_i = w[i]
+		if v_i in S and walk_sign == -1:
 			exited_cut = True
 			break
-		elif s_i in S_comp and walk_sign == 1:
+		elif v_i in S_comp and walk_sign == 1:
 			exited_cut = True
 			break
 	if exited_cut:
@@ -390,88 +421,96 @@ def num_nodes_in_cut(S,S_comp,s):
 		return walk_len
 
 def comp_updates_node_dist(walk, distance, walk_dist_weight,weights, x, y):
-	'''Compute pairs of nodes distance steps apart on walk. If walk_dist_weight,
-	weight by distance. Append new weights and new vertices to pairs.'''
-	start_nodes = walk[:-distance]
-	end_nodes = walk[distance:]
-	#symmetric, need updates in both direction
-	weights_new = np.ones(len(start_nodes)*2)
+	'''Compute weights for pairs of nodes in walk distance number of steps apart
+
+	Return update lists of node pairs and weights
+
+	Args:
+
+	walk - list of vertices 
+	distance - int for number of steps between nodes
+	walk_dist_weight - Boolean flag 
+	weights - list of weights 
+	x - list of first nodes in pairs 
+	y - list of second nodes in pairs '''
+
+	first_nodes = walk[:-distance]
+	second_nodes = walk[distance:]
+	weights_new = np.ones(len(first_nodes)*2) #symmetric, need updates in both directions
 	if walk_dist_weight:
-		#weight inversely proportional to distance of nodes
-		weights_new = weights_new*(1.0/float(distance))
-	#updates = updates + sp.coo_matrix((weights,(start_nodes+end_nodes,end_nodes+start_nodes)),shape=(n,n)).toarray()
+		weights_new = weights_new*(1.0/float(distance)) #weight inversely proportional to distance of nodes
 	weights = np.append(weights,weights_new)
-	x = np.append(x,start_nodes)
-	x = np.append(x,end_nodes)
-	y = np.append(y,end_nodes)
-	y = np.append(y,start_nodes)
+	x = np.append(x,first_nodes)
+	x = np.append(x,second_nodes)
+	y = np.append(y,second_nodes)
+	y = np.append(y,first_nodes)
 	return weights,x,y
 
-'''Using cuts and walk, update Frequency matrix using counts of node
-pairs on the walks and the cut for additional information'''
+
 def update_F(walks,F,walk_dist_weight,cut_disc,S,S_comp):
-	#walks: list of walks generated, update for each walk in walks
-	#F: frequency matrix to update
-	#walk_dist_weight: If true, increase F(u,v) inversely proportional 
-	#to the distance of (u,v) on walk 
-	#cut_disc: If true, only increase F(u,v) if (u,v) appear before 
-	#the walk crosses the cut
-	#S,S_comp: the cut
+	'''Using cuts and walk, update frequency matrix F 
+	using counts of node pairs on the walks and cut (S, S_comp) 
+
+	Return updated frequency matrix F
+
+	Args:
+
+	walks - list of walks 
+	F - frequency matrix 
+	walk_dist_weight - Boolean flag 
+	cut_disc - Boolean flag 
+	S, S_comp - bipartition of vertices (cut) '''
+
 	num_nodes = F.shape[0]
 	assert(len(S)+len(S_comp)==num_nodes)
-	updates = np.zeros_like(F)
-	weights = np.array([])
-	x = np.array([])
-	y = np.array([])
-	i = 0
-	total_seen_on_walks = set()
+	updates = np.zeros_like(F) #will be added to F in the end
+	weights = np.array([]) #entries of updates
+	x = np.array([]) #coordinates of updates
+	y = np.array([]) #coordinates of updates
 	start = time.time()
-	max_dist = 20
+	max_dist = 20 #cap for number of steps between nodes for which to add weight
 	for walk in walks:
-		for vertex in walk:
-			total_seen_on_walks.add(vertex)
-		i = i+1
-		if cut_disc:
-			n = min(max_dist,num_nodes_in_cut(S,S_comp,walk))
-		else:
-			n = min(max_dist,len(walk))
-		#update matrix for nodes in s dist apart
-		for dist in range(1,n):
+		if cut_disc: #cap is at most number of steps between first node and last node in cut
+			k = min(max_dist,num_nodes_in_cut(S,S_comp,walk))
+		else: #cap is at most length of walk
+			k = min(max_dist,len(walk))
+		for dist in range(1,k): #comp update for pairs of nodes dist steps apart
 			weights, x, y = comp_updates_node_dist(walk, dist, walk_dist_weight,weights, x, y)
-	print('time to compute matrix updates {}'.format(time.time()-start))
-	updates = sp.coo_matrix((weights,(x,y)),shape=(num_nodes,num_nodes)).toarray()
-	#no self loops
-	np.fill_diagonal(updates,0)
-	return F + updates, total_seen_on_walks
+	updates = sp.coo_matrix((weights,(x,y)),shape=(num_nodes,num_nodes)).toarray() #make matrix
+	np.fill_diagonal(updates,0) #remove self loops
+	return F + updates
 
-def matrix_update(A, S, S_comp, batch_size, F, walk_dist_weight, zero_cross, num_iters, walks, stats, round_num, truth_spec, frequencies):
-	'''Given cut S,S_comp and set of walks used to find S,S_comp, update F 
-	according to walk_dist_weight and zero_cross params.'''
-	'''Return 
-	updated F
+def matrix_update(A, S, S_comp, walk_params, F, num_iters, walks, stats, batch_num, truth_spec):
+	'''Given cut S,S_comp and list of walks used to find S,S_comp, update F 
+	according to walk_dist_weight and zero_cross params.
+	
+	Return updated F and
 	stats which maps statistic names to a list of statistic values on updated frequency matrices
-	frequencies which is a map from num_iters to frequency matrices after num_iters'''
-	total_seen = set()
-	for j in range(batch_size):
-		print('update for {}th set of walks generated in round {}'.format(j,round_num))
+	
+	Args:
+	A - Adjacency matrix of template graph 
+	S, S_comp - cut
+	walk_params - map of paramaters for update
+	F - current frequency matrix 
+	num_iters - number of walk algorithm iterations 
+	walks - list of walks 
+	stats - map of statistic names to values 
+	batch_num - number of the batch 
+	truth_spec - spectrum of symmetric normalized Laplacian of A 
+	'''
+
+	batch_size = walk_params['bs']
+	walk_dist_weight = walk_params['walk_dist_weight']
+	zero_cross = walk_params['zero_cross']
+	for j in range(batch_size): #Updates F for the jth walk algorithm iteration in batch
 		start = time.time()
-		'''Either computed batch size number of walks, or the initial walks
-		labeled all nodes'''
-		if (len(walks) == 1):
-			F, seen = update_F(walks[0],F,walk_dist_weight,zero_cross,S,S_comp)
-			total_seen = total_seen.union(seen)
+		if (len(walks) == 1): #Batch labeled all nodes with the seed walks
+			F = update_F(walks[0],F,walk_dist_weight,zero_cross,S,S_comp)
 			walk_num = 0
 			final_walk = 0
-			#use F for every walk algorithm iteartions in this batch
-			for j in range(batch_size):
-				if (round_num*batch_size)+j+1 in num_iters:
-					#save the frequency matrix in num_iters
-					normF = utils.normMatrix_wsum(F,A.sum())
-					frequencies[(round_num*batch_size)+j+1] = normF
-		elif (len(walks) > 1):
+		elif (len(walks) > 1): #Batch computed a batch_size number of walks
 			assert(len(walks)==batch_size)
-			F, seen = update_F(walks[j],F,walk_dist_weight,zero_cross,S,S_comp)
-			total_seen = total_seen.union(seen)
+			F = update_F(walks[j],F,walk_dist_weight,zero_cross,S,S_comp)
 			walk_num = j
 			final_walk = batch_size-1					
 		end = time.time()
@@ -482,20 +521,14 @@ def matrix_update(A, S, S_comp, batch_size, F, walk_dist_weight, zero_cross, num
 		stats['first_walk_nodes'].append([walks[walk_num][0],walks[walk_num][1]])
 		walk_lens = [len(walk) for walk in walks[walk_num]]
 		num_transitions = [len(walk)-1 for walk in walks[walk_num]]
-		if (len(walks) > 1) and ((round_num*batch_size)+j+1 in num_iters):
-			#save the frequency matrix in num_iters
-			normF = utils.normMatrix_wsum(F,A.sum())
-			frequencies[(round_num*batch_size)+j+1] = normF
-		#Record statistics oncee all walk algorithim iterations recorded 
-		#for every other round
-		if (j==final_walk) and (round_num%2 == 1):
-			if ((round_num*batch_size)+j) not in num_iters: 
+		if (j==final_walk) and (batch_num%2 == 1): #Record statistics every other batch
+			if ((batch_num*batch_size)+j) not in num_iters: 
 				normF = utils.normMatrix_wsum(F,A.sum())
 			spec_check = utils.spectrum(normF)
 			l2_lin_check = utils.l2_lin_weight(spec_check,truth_spec)
 			entropy_check = np.mean(utils.entropy_m(normF))
-			stats['checkpoints'].append((round_num+1)*batch_size)
-			stats['num_rounds'].append(round_num+1)
+			stats['checkpoints'].append((batch_num+1)*batch_size)
+			stats['batch_size'].append(batch_num+1)
 			stats['l2_lins'].append(l2_lin_check)
 			stats['num_expect_edges'].append(normF.sum())	
 			stats['entropy_list'].append(entropy_check)	
@@ -507,84 +540,88 @@ def matrix_update(A, S, S_comp, batch_size, F, walk_dist_weight, zero_cross, num
 		assert(F.sum() == prev_sum) #F should not be changed
 		if len(walks) == 1:
 			break
-	print(len(total_seen))
-	return F, stats, frequencies
+	return F, stats
 
 
-def gen_freq_from_walks(A,walker1,walker2,num_iters,walk_params,plot_path=None,freq_path = None):
-	'''Perform walk algorithm k times to construct frequency matrix'''
-	'''Return map of num_iters to frequencies after num_iters'''
+def gen_freq_from_walks(A,walker1,walker2,num_iters,walk_params,data_path=None,freq_path = None):
+	'''Generate probabilistic adjacency matrix using random walk generation
+	Return map of walk algorithm iterations to number of seconds
+
+	Args:
+	A - adjacency matrix of target graph 
+	walker1, walker2 - independent generators to walk along target graph
+	num_iters - list of number of walk algorithm iterations to run before writing scaled 
+		probabilistic adjacency matrix 
+	walk_params - hyperparamater map 
+	data_path - path to write statistics of cuts found 
+	freq_path - paths for writing probabilistc adjacency matrices 
+
+	'''
 	start = time.time()
 	times = {}
-	n = A.shape[0]
 	truth_spec = utils.spectrum(A)
-	F = np.zeros((n,n))
-	#stats on F as after completed rounds
+	F = np.zeros((A.shape[0],A.shape[0])) #Initialize frequency matrix
 	stats = defaultdict(list)
-	#In each round, we run batch_size number of walk_alg iterations
-	batch_size = walk_params['bs']
-	walk_dist_weight = walk_params['walk_dist_weight']
-	zero_cross = walk_params['zero_cross']
-	num_rounds = [int(x/batch_size) for x in num_iters]
-	frequency_map = {}
-	#We output the graphs for each num_iter in num_iters_scaled. we run the
-	#algorithm until the maximum is hit
-	max_rounds = max(num_rounds)
-	for i in range(max_rounds):
-		print('Round {}'.format(i))
-		#One cut generated per round with batch of sets of walks that label 
-		#each node at least once
-		print('time starting round {} {}'.format(i, time.time()-start))
+	num_batches = [int(x/walk_params['bs']) for x in num_iters] #number of rounds is number of iterations divided by batch size
+	max_batches = max(num_batches) 
+	for i in range(max_batches):
 		(S,S_comp,walks) = gen_cut_from_walks(A,walker1,walker2,walk_params)
-		print('time after generating cuts in round {} {} '.format(i, time.time()-start))
 		assert(len(S.intersection(S_comp)) == 0)
-		F, stats, frequency_map = matrix_update(A, S, S_comp, batch_size, F, walk_dist_weight, zero_cross, num_iters, walks, stats, i, truth_spec, frequency_map)
-		print('time after updating frequency matrix {} {} '.format(i, time.time()-start))
-		#record time
-		if ((i+1)*batch_size) in num_iters:
+		F, stats = matrix_update(A, S, S_comp, walk_params, F, num_iters, walks, stats, i, truth_spec)
+		if ((i+1)*batch_size) in num_iters: #record time
 			if freq_path != None:
 				print('SAVING HERE')
 				sF = utils.normMatrix_wsum(F,A.sum())
 				np.savetxt(freq_path+'num_iters{}.txt'.format((i+1)*batch_size),sF)
 			times[(i+1)*batch_size] = time.time()-start
-	assert(len(list(frequency_map.keys())) == len(num_iters))
-	if plot_path !=None:
-		with open(plot_path+"cuts.csv","w") as f:
+	if data_path !=None: #recording data
+		with open(data_path+"cuts.csv","w") as f:
 		    wr = csv.writer(f)
 		    wr.writerows(stats['cuts'])
 		f.close()
-		with open(plot_path+"first_walk_nodes.csv","w") as f:
+		with open(data_path+"first_walk_nodes.csv","w") as f:
 		    wr = csv.writer(f)
 		    wr.writerows(stats['first_walk_nodes'])
 		f.close()
-		np.savetxt(plot_path+'conductance.txt',stats['conductance'])
-		np.savetxt(plot_path+'checkpoints.txt',stats['checkpoints'])
-		np.savetxt(plot_path+'num_rounds.txt',stats['num_rounds'])
-		np.savetxt(plot_path+'l2_lin.txt',stats['l2_lins'])
-		np.savetxt(plot_path+'num_expect_edges.txt',stats['num_expect_edges'])
-		np.savetxt(plot_path+'entropy.txt',stats['entropy_list'])
-		np.savetxt(plot_path+'spectra.txt',stats['spectra'])
-		np.savetxt(plot_path+'num_walks.txt',stats['num_walks'])
-		np.savetxt(plot_path+'mean_walk_len.txt',stats['mean_walk_len'])
-		np.savetxt(plot_path+'total_transitions.txt',stats['total_transitions'])
-		np.savetxt(plot_path+'time_to_update.txt',stats['time_to_update'])
-	return frequency_map, times
+		np.savetxt(data_path+'conductance.txt',stats['conductance'])
+		np.savetxt(data_path+'checkpoints.txt',stats['checkpoints'])
+		np.savetxt(data_path+'batch_size.txt',stats['batch_size'])
+		np.savetxt(data_path+'l2_lin.txt',stats['l2_lins'])
+		np.savetxt(data_path+'num_expect_edges.txt',stats['num_expect_edges'])
+		np.savetxt(data_path+'entropy.txt',stats['entropy_list'])
+		np.savetxt(data_path+'spectra.txt',stats['spectra'])
+		np.savetxt(data_path+'num_walks.txt',stats['num_walks'])
+		np.savetxt(data_path+'mean_walk_len.txt',stats['mean_walk_len'])
+		np.savetxt(data_path+'total_transitions.txt',stats['total_transitions'])
+		np.savetxt(data_path+'time_to_update.txt',stats['time_to_update'])
+	return times
 
 
 
-def rw_gen(A_truth,algs,num_iters,freq_paths, data_paths):
-	'''Return frequency matrix and time for each alg in algs'''
-	frequencies = {}
+def rw_gen(A,hyperparams,num_iters,prob_adj_paths, data_paths):
+	'''Compute probabilistic adjacency matrix for each hyperparamater set.
+	Return map of hyperparamater set to map of walk algorithm iterations to number of seconds
+
+	Args:
+
+	A - Adjacency matrix of template graph 
+	hyperparams - random walk generation hyperparamater sets 
+	num_iters - map of hyperparamater set to 
+		list of number of random walk algorithm iterations to run  
+	prob_adj_paths - map of hyperparamater set to 
+		path for writing the probabilistic adjacency matrices
+	data_paths - map of hyperparamater set to 
+		path for writing data on cuts sampled'''
+
 	times = {}
-	walker1, walker2 = gen_walkers(A_truth)
-	for alg in algs:
-		print(alg)
-		comp, config = gen_walk_config(alg)
+	walker1, walker2 = gen_walkers(A)
+	for y in hyperparams:
+		comp, config = gen_walk_config(y) #dictionary of args for hyperparamaters
 		if comp == True:
-			freq_path = freq_paths[alg]
-			data_path = data_paths[alg]
-			num_iters_alg = num_iters[alg]
-			frequencies[alg], times[alg] = gen_freq_from_walks(A_truth,walker1,walker2,num_iters_alg,config,data_path,freq_path)
+			prob_adj_path = prob_adj_paths[y]
+			data_path = data_paths[y]
+			num_iters_alg = num_iters[y]
+			times[y] = gen_freq_from_walks(A,walker1,walker2,num_iters_alg,config,data_path,prob_adj_path)
 		else:
 			print(alg_missing)
 	return times
