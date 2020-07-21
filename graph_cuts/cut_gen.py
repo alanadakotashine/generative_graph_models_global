@@ -199,7 +199,8 @@ def test_correct_balance_batch():
 	#2 cuts
 	#LL, LR, LC, RL, RR, RC, CL, CR, CC
 	A_star = np.zeros((8,8))
-	A_star[0,1]=1
+	A_star[0,1]=.9
+	A_star[0,3]=.1
 	A_star[1,2]=1
 	A_star[2,3]=1
 	A_star[3,4]=1
@@ -215,7 +216,7 @@ def test_correct_balance_batch():
 	A[5,1]=1
 	cuts = [set([0,1,2,3])]
 	for single in [True, False]:
-		for unif_update in [False,True]:
+		for unif_update in [True, False]:
 			print('single {} unif update {}'.format(single, unif_update))
 			A, high = correct_cut_set(A,A_star,cuts,single,unif_update)
 			print(gen_connectivity_across_cuts(A,cuts))
@@ -248,14 +249,14 @@ def test_opt_assignment():
 	A[5,1]=1
 	cuts = [set([0,1,2,3])]
 	single = True
-	vertex_labels, graph_part_label_vertices_map, variables, capacity_dict, capacities = construct_node_partition(A_star.shape[0],cuts)
-	print(graph_part_label_vertices_map)
+	vertex_labels, node_part_label_vertices_map, variables, capacity_dict, capacities = construct_node_partition(A_star.shape[0],cuts)
+	print(node_part_label_vertices_map)
 	print(vertex_labels)
 	print(variables)
 	print(capacity_dict)
 	#given a graph, we can compute the graph's assignment to each of the variables
-	y_star = np.array(gen_assignment(A_star,graph_part_label_vertices_map,variables))
-	y_prime = np.array(gen_assignment(A,graph_part_label_vertices_map,variables))
+	y_star = np.array(gen_assignment(A_star,node_part_label_vertices_map,variables))
+	y_prime = np.array(gen_assignment(A,node_part_label_vertices_map,variables))
 	#optimize for new assignment
 	y = gen_opt_assignment(len(cuts), y_star, y_prime, capacities, single)
 	print(y_star)
@@ -392,46 +393,26 @@ def test_gen_cuts():
 '''CUT FIX GENERATON'''
 '''Helpers for computing valid assignment for cut constraint '''
 
-'''For loading in cuts sampled during walk algorithms to correct'''
-def rand_cuts_from_walk_algs(freq_gen, walk_algs, cut_correct_fix_from_walks):
-	if (cut_correct_fix_from_walks > 0) and freq_gen in walk_algs:
-		#load cuts and sample cut_correct_fix_from_walks to fix
-		with open(params['header_short'][0]+'_'+freq_gen+'_'+str(i)+'_'+"cuts.csv","r") as f:
-			read = csv.reader(f)
-			cuts_tmp = list(read)
-		s_cuts_tmp = set()
-		for x in cuts_tmp:
-			s_cuts_tmp.add(tuple(x))
-		cuts_tmp = list(s_cuts_tmp)
-		num_cuts = len(s_cuts_tmp)
-		rand_cut_idx = np.random.choice(num_cuts,cut_correct_fix_from_walks)
-		rand_cuts_tmp = [cuts_tmp[x] for x in rand_cut_idx]
-		rand_cuts = []
-		for cut_tmp in rand_cuts_tmp:
-			cut = [int(x) for x in cut_tmp]
-			rand_cuts.append(cut)
-	else:
-		rand_cuts = []
-	return rand_cuts
-
 
 def gen_vertex_labels(n,cuts,node_partitions):
-	'''Cuts is a list of lenth k. kth element is the kth cut'''
-	'''Each part_rep in node_partitions is a k-length bit
-	vector with the kth bit indicating if the nodes in that 
-	partition are in the kth cut'''
-	'''Returns labels: map mapping part_rep to nodes in that partition'''
-	labels = dict.fromkeys(node_partitions)
-	for part_rep in node_partitions:
-		labels[part_rep] = []
+	'''Return map of node partition label to list of vertices with that label 
+
+	Args:
+		n - number of vertices
+		cuts - list of list of lenth k. kth element is the kth cut
+		node_partitions - list of k-length bit vectors with 
+			the kth bit indicating if node in kth cut'''
+	labels = {}
+	for node_part_rep in node_partitions: #initialize list for representation 
+		labels[node_part_rep] = []
 	for i in range(n):
-		rep_of_i = ''
+		rep_of_i = '' #compute bit vector of node i
 		for cut in cuts:
 			if i in cut:
 				rep_of_i = rep_of_i + '1'
 			else:
 				rep_of_i = rep_of_i + '0'
-		labels[rep_of_i].append(i)
+		labels[rep_of_i].append(i) #append i to its list
 	return labels
 
 def bit_str_comp(x):
@@ -444,30 +425,25 @@ def bit_str_comp(x):
 			result = result+ '1'
 	return result
 
-def var_to_node_part_pair_reps(var):
-	'''Var is a k-length vector which indicates whether the node 
-	pairs are on the left, right, or crossing the kth cut using a 0,1,2'''
-	'''Used to extract a list of pairs of node partitions for which
-	var represents'''
-	num_cuts = len(var)
-	#initialize first node part
-	node_part_1 = np.array(['0']*len(var))
+def var_to_node_part_pair_reps(node_pair_part):
+	'''Return list of node partition pairs correspoinding to node pair partition
+
+	Args:
+		node_pair_part - k length vector with ith entry equal to 0,1,2 
+			for if node pair is outside, in, or crossing ith cut'''
+	num_cuts = len(node_pair_part)
+	node_part_1 = np.array(['0']*num_cuts)
 	indices_crossing = []
-	for k in range(len(var)):
-		val = var[k]
-		#update node_part to right side of cut
+	for k in range(num_cuts): #fill entries for pair in cut and crosing
+		val = node_pair_part[k]
 		if val == 1:
 			node_part_1[k] = val
 		if val == 2:
 			indices_crossing.append(k)
 	num_crossing = len(indices_crossing)
-	#if no nodes are crossing, the node pairs are all on the same side of the cut
-	#and edges are placed among those
-	if num_crossing == 0:
+	if num_crossing == 0: #Pairs do not cross cuts, all pairs in the same node partition
 		return [("".join(list(node_part_1)),"".join(list(node_part_1)))]
-	else:
-		#get all the combinations for which node pairs can cross the cuts. We need all the 
-		#binary strings and their complements of length num_crossing
+	else: #compue node partitions that cross cuts the pairs cross
 		crossing_reps = [np.binary_repr(i,width=num_crossing) for i in range(2**(num_crossing-1))]
 		crossing_reps_comp = [bit_str_comp(x) for x in crossing_reps]
 		crossing_rep_pairs = zip(crossing_reps, crossing_reps_comp)
@@ -481,16 +457,21 @@ def var_to_node_part_pair_reps(var):
 		return result
 
 
-def gen_assignment(A,vertex_labels,variables):
-	'''For each var:
-	append sum number of edges assigned to node pairs assigned to var. 
-	Return list of number of edges'''
+def gen_assignment(A,node_part_to_vertices,node_pair_parts):
+	'''
+	Returns:
+		result - list with ith entry the amount of mass assigned to node_pair_parts[i]
+	Args:
+		A - probabilistic adjacency matrix 
+		node_part_to_vertices - map of node partition to list of nodes 
+		node_pair_parts - list of node pair partitions 
+	'''
 	result = []
-	for var in variables:
-		pairs = var_to_node_part_pair_reps(var)
+	for var in node_pair_parts:
+		pairs = var_to_node_part_pair_reps(var) #list of pairs of node partitions in node pair partition
 		num_edges = 0
 		for (x,y) in pairs:
-			sub_graph = A[vertex_labels[x]][:,vertex_labels[y]]
+			sub_graph = A[node_part_to_vertices[x]][:,node_part_to_vertices[y]]
 			if x==y:
 				num_edges += sub_graph.sum()/2
 			else:
@@ -499,19 +480,29 @@ def gen_assignment(A,vertex_labels,variables):
 	return result
 
 
-def gen_capacities(variables,vertex_labels):
-	'''variables: list of the node pair partition representation'''
-	'''vertex_labels: map of node partition representations to vertices in those partitions'''
-	'''returns capacity_map: map of node pair partition representation to its capacity '''
+def gen_capacities(node_pair_parts,vertex_labels):
+	'''Compute number of node pairs (capacity ) in each node pair partition
+
+	Return:
+		capacity_map - map of each node pair partition to capacity
+		capacity_list - list of capacities with ith entry equal to 
+			capacity of ith node pair partition  
+
+	Args:
+		node_pair_parts - list of node pair partitions represented
+			as vectors with each entry as 0,1,2 for if node pairs 
+			are outside, inside, or crossing cut
+		vertex_labels - map of each node partititon to list of nodes
+	'''
 	capacity_map = {}
 	capacity_list = []
-	for var in variables:
-		node_partition_pair = var_to_node_part_pair_reps(var)
+	for var in node_pair_parts:
+		node_partition_pairs = var_to_node_part_pair_reps(var) #list of pairs of node partitions in node pair partition
 		capacity = 0
-		for (x,y) in node_partition_pair: 
+		for (x,y) in node_partition_pairs: 
 			if x == y:
 				v = len(vertex_labels[x])
-				capacity += (v*(v-1))/2
+				capacity += (v*(v-1))/2 #do not count each edge twice
 			else:
 				capacity += len(vertex_labels[x])*len(vertex_labels[y])
 		capacity_map[var] = capacity
@@ -520,35 +511,70 @@ def gen_capacities(variables,vertex_labels):
 
 
 def gen_constraints(num_cuts, variables):
-	num_variables = 3**num_cuts
+	'''Compute constraint matrix for 
+		number of edges on either side and crossing num_cuts cuts 
+
+	Return:
+		constraints - num_cuts*3 by num_variables matrix with 
+			the ith triple of rows denoting the three constraints 
+			for the ith cut 
+
+	Args:
+		num_cuts - Int for number of cuts
+		variables - Representation for each node pair partition with 
+			ith entry taking 0,1,2 marking if node pairs 
+			are outside, inside, or crossing the ith cut
+
+	'''
+	num_variables = len(variables)
 	constraints = np.zeros((num_cuts*3,num_variables))
-	#place 1 in all the rows that the variable touches. The variable
-	#touches one in every row triple 
-	#(because each variable is on the left, right, or crossing the cut)
 	for i in range(num_variables):
 		var = variables[i]
 		for cut_num in range(num_cuts):
-			#Variable touches the var[cut_num] row in the row triple
 			constraints[(cut_num*3)+var[cut_num]][i] = 1
 	return constraints
 
 def gen_constraints_cross_only(num_cuts, variables):
+
+	'''Compute constraint matrix for 
+		number of edges crossing num_cuts cuts
+
+	Return:
+		constraints - num_cuts*3 by num_variables matrix with 
+			the ith triple of rows denoting the three constraints 
+			for the ith cut 
+
+	Args:
+		num_cuts - Int for number of cuts
+		variables - Representation for each node pair partition with 
+			ith entry taking 0,1,2 marking if node pairs 
+			are outside, inside, or crossing the ith cut
+
+	'''
 	num_variables = 3**num_cuts
 	constraints = np.zeros((num_cuts,num_variables))
 	for i in range(num_variables):
 		var = variables[i]
-		for cut_num in range(num_cuts):
-			#Only computing cross constraints, so only matters if 
-			#the variable is crossing
-			if var[cut_num] == 2:
-				constraints[cut_num][i] = 1
+		for j in range(num_cuts):
+			if var[j] == 2: #Node pair is crossing jth cut
+				constraints[j][i] = 1
 	return constraints
 
 '''Helpers for updating subgraphs'''
 
 def update_helper(sub_graph, diff,unif_update=False):
 	'''Change the sum of the entries in the sub_graph by uniformly on 
-	pairs with space or uniformly on pairs with space above/below midpoint'''
+	pairs with space or uniformly on pairs with space above/below midpoint
+
+	Return: 
+		sub_graph - matrix with diff amount of mass added with entries within [0,1] 
+
+	Args:
+		sub_graph - matrix with entries within [0,1]
+		diff - amount to add, could be positive or negative 
+		unif_update - Boolean flag for method to distribute diff 
+			among pairs in sub_graph (default is False)
+			If True, use unif_update. Use push_update otherwise. '''
 	t_first = .001
 	total_before = sub_graph.sum()
 	left = diff
@@ -727,8 +753,7 @@ def sub_graph_assignment(A,diffs,current,new_sol,variable_vertex_map,variables,u
 			diff_actual = min(capacity - cur, diff)
 		if (np.abs(diff) > 0):
 			if np.abs(diff_actual) > 0:
-				#each variable could be mapped to multiple subgraphs
-				pairs = var_to_node_part_pair_reps(var)
+				pairs = var_to_node_part_pair_reps(var) #list of pairs of node partitions in node pair partition
 				#how much to add/remove from each sub-graph depends
 				#on how much space it has
 				pair_weight, sub_graphs = comp_pair_weight(pairs,A,diff_actual,variable_vertex_map)
@@ -1194,7 +1219,7 @@ def construct_node_partition(n,cuts):
 	Returns:
 		vertex_labels - list of k-length bit vectors for each vertex
 			representing membership of each vertex to the k cuts 
-		graph_part_label_vertices_map - map of k-length bit vector label 
+		node_part_label_vertices_map - map of k-length bit vector label 
 			to vertices with that membership label 
 		variables - representation for each node pair partition defined by cuts 
 		capacity_dict - map of variables to number of node pairs 
@@ -1208,10 +1233,10 @@ def construct_node_partition(n,cuts):
 	'''
 	k = len(cuts)
 	vertex_labels = [np.binary_repr(i,width=k) for i in range(2**k)]
-	graph_part_label_vertices_map = gen_vertex_labels(n,cuts,vertex_labels)
+	node_part_label_vertices_map = gen_vertex_labels(n,cuts,vertex_labels)
 	variables = list(itertools.product([0,1,2], repeat = k))
-	capacity_dict, capacities = gen_capacities(variables, graph_part_label_vertices_map)
-	return vertex_labels, graph_part_label_vertices_map, variables, capacity_dict, capacities
+	capacity_dict, capacities = gen_capacities(variables, node_part_label_vertices_map)
+	return vertex_labels, node_part_label_vertices_map, variables, capacity_dict, capacities
 
 
 
@@ -1229,9 +1254,9 @@ def correct_cut_set(A,A_truth,cuts,single, unif_update):
 		unif_update - Boolean flag for wheter or not to use uniform update. 
 			If false, use psuh update.
 	'''
-	vertex_labels, graph_part_label_vertices_map, variables, capacity_dict, capacities = construct_node_partition(A_truth.shape[0],cuts)
-	y_star = np.array(gen_assignment(A_truth,graph_part_label_vertices_map,variables))
-	y_prime = np.array(gen_assignment(A,graph_part_label_vertices_map,variables))
+	vertex_labels, node_part_label_vertices_map, variables, capacity_dict, capacities = construct_node_partition(A_truth.shape[0],cuts)
+	y_star = np.array(gen_assignment(A_truth,node_part_label_vertices_map,variables))
+	y_prime = np.array(gen_assignment(A,node_part_label_vertices_map,variables))
 	assert(len(variables) == 3**len(cuts))
 	y, heavy = gen_opt_assignment(len(cuts), y_star, y_prime, capacities, single, variables) #optimize for new assignment
 	diff = dict(zip(variables,y - y_prime))
@@ -1239,9 +1264,9 @@ def correct_cut_set(A,A_truth,cuts,single, unif_update):
 	new_sol = dict(zip(variables,y))
 	A_before = np.copy(A)
 	'''Compute amount to add/remove from subgraphs defined by node partition pairs'''
-	pair_weight_all, sub_graphs_all = sub_graph_assignment(A,diff,current,new_sol,graph_part_label_vertices_map,variables,unif_update)
+	pair_weight_all, sub_graphs_all = sub_graph_assignment(A,diff,current,new_sol,node_part_label_vertices_map,variables,unif_update)
 	'''Update subgraphs in matrix'''
-	A_temp = update_sub_graphs(A, pair_weight_all, sub_graphs_all, graph_part_label_vertices_map, unif_update)
+	A_temp = update_sub_graphs(A, pair_weight_all, sub_graphs_all, node_part_label_vertices_map, unif_update)
 	'''Correct for any errors in QP'''
 	overflow = A_before.sum() - A_temp.sum()
 	np.fill_diagonal(A_temp,1)
