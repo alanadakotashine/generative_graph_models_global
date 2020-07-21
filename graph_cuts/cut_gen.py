@@ -248,7 +248,7 @@ def test_opt_assignment():
 	A[5,1]=1
 	cuts = [set([0,1,2,3])]
 	single = True
-	vertex_labels, graph_part_label_vertices_map, variables, capacity_dict, capacities = construct_node_partition(A,A_star,cuts)
+	vertex_labels, graph_part_label_vertices_map, variables, capacity_dict, capacities = construct_node_partition(A_star.shape[0],cuts)
 	print(graph_part_label_vertices_map)
 	print(vertex_labels)
 	print(variables)
@@ -257,7 +257,7 @@ def test_opt_assignment():
 	y_star = np.array(gen_assignment(A_star,graph_part_label_vertices_map,variables))
 	y_prime = np.array(gen_assignment(A,graph_part_label_vertices_map,variables))
 	#optimize for new assignment
-	y = gen_opt_assignment(len(cuts), y_star, y_prime, variables, capacities, single)
+	y = gen_opt_assignment(len(cuts), y_star, y_prime, capacities, single)
 	print(y_star)
 	print(y_prime)
 	print(y)
@@ -284,24 +284,42 @@ def gen_connectivity_across_cuts(A,cuts):
 
 	
 def test_grasp():
-	A_truth = np.zeros((9,9))
-	A_truth[:3,:3] = [[0,1,1],[1,0,1],[1,1,0]]
-	A_truth[3:6,3:6]=[[0,1,1],[1,0,1],[1,1,0]]
-	A_truth[6:9,6:9]=[[0,1,1],[1,0,1],[1,1,0]]
-	A = copy.deepcopy(A_truth)
+	baseline = np.zeros((9,9))
+	baseline[:3,:3] = [[0,1,1],[1,0,1],[1,1,0]]
+	baseline[3:6,3:6]=[[0,1,1],[1,0,1],[1,1,0]]
+	baseline[6:9,6:9]=[[0,1,1],[1,0,1],[1,1,0]]
+	A = copy.deepcopy(baseline)
+	A_truth = copy.deepcopy(baseline)
 	print(A.shape)
-	A[0,3]=1
-	A[3,0]=1
-	A[1,4]=1
-	A[4,1]=1
-	A[2,5]=1
-	A[5,2]=1
-	A[0,6]=1
-	A[6,0]=1
-	A[1,7]=-1
-	A[7,1]=-1
-	A[1,8]=-1
-	A[8,1]=-1
+	A_truth[0,3]=1
+	A_truth[3,0]=1
+	A_truth[1,4]=1
+	A_truth[4,1]=1
+	A_truth[2,5]=1
+	A_truth[5,2]=1
+	A_truth[0,6]=1
+	A_truth[6,0]=1
+	A_truth[4,5]=0
+	A_truth[5,4]=0
+	A_truth[2,1]=0
+	A_truth[1,2]=0
+
+
+	A[1,7]=.5
+	A[7,1]=.5
+	A[1,8]=.5
+	A[8,1]=.5
+	A[0,3]=.2
+	A[3,0]=.2
+	A[3,6]=.2
+	A[6,3]=.2
+	A[4,2]=.2
+	A[2,4]=.2
+	A[5,7]=.2
+	A[7,5]=.2
+	A[5,8]=.2
+	A[8,5]=.2
+	
 	n = 9
 	new_neighborhood_size = 5
 	cur_neighborhood_size = n
@@ -311,6 +329,10 @@ def test_grasp():
 	#ith row of out neighbors are the neighbors of i
 	#ith row of out graph is the connectivity of the ith node to each of it's neighbors
 	I = A_truth - A
+	print(A_truth)
+	print(A)
+	print(A_truth.sum())
+	print(A.sum())
 	out_graph = I
 	out_graph, in_graph, out_neighbors, in_neighbors = sample_neighborhood_subset(n, new_neighborhood_size,I,out_graph,[np.arange(n)]*n,cur_neighborhood_size)
 	for i in range(10):
@@ -320,6 +342,7 @@ def test_grasp():
 		print(np.abs(cut_conn(I,c,c_comp)))
 		print('cut')
 		print(c)
+		print(hi)
 	I = A-A_truth
 	out_graph = I
 	out_graph, in_graph, out_neighbors, in_neighbors = sample_neighborhood_subset(n, new_neighborhood_size,I,out_graph,[np.arange(n)]*n,cur_neighborhood_size)
@@ -496,9 +519,8 @@ def gen_capacities(variables,vertex_labels):
 	return capacity_map, capacity_list
 
 
-def gen_constraints(variables):
-	num_cuts = len(variables[0])
-	num_variables = len(variables)
+def gen_constraints(num_cuts, variables):
+	num_variables = 3**num_cuts
 	constraints = np.zeros((num_cuts*3,num_variables))
 	#place 1 in all the rows that the variable touches. The variable
 	#touches one in every row triple 
@@ -510,9 +532,8 @@ def gen_constraints(variables):
 			constraints[(cut_num*3)+var[cut_num]][i] = 1
 	return constraints
 
-def gen_constraints_cross_only(variables):
-	num_cuts = len(variables[0])
-	num_variables = len(variables)
+def gen_constraints_cross_only(num_cuts, variables):
+	num_variables = 3**num_cuts
 	constraints = np.zeros((num_cuts,num_variables))
 	for i in range(num_variables):
 		var = variables[i]
@@ -998,6 +1019,8 @@ def update_conn_list(conn_list, incoming, v, S, incoming_neighbors, inc=True, de
 def greedy_place(A,out_graph,s,f,g,out_neighbors,in_graph,in_neighbors,n,neighborhood_size,sub_neighborhood_size):
 	'''Randomly place s nodes into S,S_comp disjoint sets'''
 	(S,S_comp) = random_place(n,s)
+	print(S)
+	print(S_comp)
 	#conn_list constists of two lists of length n
 	#where the vth entry maps f(v,S(N(v))) where  S(N(v)) are the elements of 
 	#of S that intersect N(v) which is the set of the neighbors of v
@@ -1013,6 +1036,7 @@ def greedy_place(A,out_graph,s,f,g,out_neighbors,in_graph,in_neighbors,n,neighbo
 			bitS_comp[v]=1
 		else:
 			conn_v = conn_list[:,v]
+			print(conn_v)
 			#if g(f(v,S)) is high, place on other side
 			#to have high value of g(f(-)) across cut
 			if g(conn_v[0])>=g(conn_v[1]):
@@ -1021,6 +1045,7 @@ def greedy_place(A,out_graph,s,f,g,out_neighbors,in_graph,in_neighbors,n,neighbo
 			else:
 				S.add(v) 
 				bitS[v]=1
+			print(S)
 			#adding v for the first time, connectivity to either S,S_comp
 			#is only increased for node neighbors so no need to decrement
 			increment_update = True
@@ -1063,11 +1088,24 @@ def grasp(A,out_graph,s,k,f,f_global,g,out_neighbors,in_graph,in_neighbors,sub_n
 			cur_best = score
 	return (S_star, S_comp_star)
 
-def correct_cut_set_gen_constraints(P, num_cut_constraints, num_vars, capacities, true_conn, total):
-	'''P encodes which variables touch which constraint'''
+def correct_cut_set_gen_constraints(P, capacities, true_conn, total):
+	'''Computes constraint matrix with relaxations for connectivity and capcaity
+
+	Returns:
+		C - constraint matrix 
+		b - value matrix 
+
+	Args:
+		P - connectivity matrix with ith row or ith triple of rows
+			denoting connectivity constraint for ith cut (single or triple) 
+		capacities - number of node pairs in each node pair partition defined by cuts
+		true_conn - true connectivity across each cut
+		total - total number of mass in true adjacency matrix '''
 	relax_conn_constraint = .01
 	relax_capacity_constraint = .01
 	relax_total_constraint = .01
+	num_cut_constraints = P.shape[0]*2
+	num_vars = P.shape[1]
 	C = np.zeros((num_cut_constraints + num_vars*2 + 2,num_vars))
 	b = np.zeros(num_cut_constraints+num_vars*2 + 2)
 	#conn constraints
@@ -1088,119 +1126,154 @@ def correct_cut_set_gen_constraints(P, num_cut_constraints, num_vars, capacities
 	b[num_cut_constraints+2*num_vars+1]=-total-relax_total_constraint
 	return C, b
 
-def gen_opt_assignment(num_cuts, y_star, y_prime, variables, capacities, single):
+def comp_heavy(true_conn, cur_conn, single, num_cuts):
+	'''Compute for each cut if connectivity is across is heavier than truth 
+
+	Returns: 
+		heavy - vector of legth num_cuts that has 1 if connectivity across cut 
+			is heavier than truth and 0 otherwise  
+
+	Args:
+		true_conn - true connectivity vector 
+		cur_conn - current connectivity vector 
+		single - Boolean flag, True if connectivity vectors contain connectivity 
+			across only
+		num_cuts - Int, number of cuts '''
+	heavy = [0]*num_cuts 
+	for i in range(num_cuts):
+		if single:
+			if cur_conn[i] > true_conn[i]:
+				heavy[i] = 1
+			elif  cur_conn[i] < true_conn[i]:
+				heavy[i] = -1
+		else:
+			j = i*3 + 2 #connectivity across cut is last value in each triple
+			if cur_conn[j] > true_conn[j]:
+				heavy[i] = 1
+			elif  cur_conn[j] < true_conn[j]:
+				heavy[i] = -1
+	return heavy
+
+def gen_opt_assignment(num_cuts, y_star, y_prime, capacities, single, variables):
+	'''Compute assignment of number of edges to place y 
+	on each node pair set in variables that satisfies the cut constraints 
+	imposed by true assignment y_star closest to current assignment y_prime
+
+	Returns: 
+		y - vector of number of edges to place in each node pair set in variables 
+		heavy - indicator vector for whether current assignment across each cut 
+			is heavier than true assignment
+
+	Args:
+		num_cuts - int number of cuts
+		y_star - true assignment 
+		y_prime - current assignment 
+		variables - '''
 	total = y_star.sum()
 	solve_qp = True
-	#The kth row of P indicates the variable touching the kth constraint
 	if single:
-		P = gen_constraints_cross_only(variables)
+		P = gen_constraints_cross_only(num_cuts, variables) #one constraint for each cut
 	else:
-		P = gen_constraints(variables)
-		if num_cuts == 1:
+		P = gen_constraints(num_cuts, variables) #three constarints for each cut
+		if num_cuts == 1: #only one solution
 			solve_qp = False
-	true_conn = np.matmul(P,y_star)
+	true_conn = np.matmul(P,y_star) 
 	cur_conn = np.matmul(P,y_prime)
-	#Compute if cuts are currently heavy/light
-	heavy = [0]*num_cuts
-	for i in range(num_cuts):
-		if cur_conn[i] > true_conn[i]:
-			heavy[i] = 1
-		elif  cur_conn[i] < true_conn[i]:
-			heavy[i] = -1 
-	if single:
-		num_cut_constraints = num_cuts*2
-	else:
-		num_cut_constraints = num_cuts*6
-	#make sure entries not below 0 or above 1
-	num_vars = len(variables)
+	heavy = comp_heavy(true_conn, cur_conn, single, num_cuts) #Compute if cuts are currently heavy/light
 	if solve_qp:
-		C,b = correct_cut_set_gen_constraints(P, num_cut_constraints, num_vars, capacities, true_conn, total)
-		I = np.eye(y_star.shape[0])
-		'''Solve QP which finds satisfying assignment to the node pair partitions that
-		minimizes total perturbation'''
-		print('call to quadprog')
+		C,b = correct_cut_set_gen_constraints(P, capacities, true_conn, total) #add capacity constraints and total constraints
+		I = np.eye(y_star.shape[0]) #minimized squared difference to y_prime
 		y = quadprog.solve_qp(I,y_prime,C.T,b)[0]
 	else:
 		y = y_star
 	return y, heavy
 
-def construct_node_partition(A,A_star,cuts):
-	num_cuts = len(cuts)
-	#Each vertex is labeled with a k-length bit vector 
-	#representing if it is in the kth cut to represent the
-	#graph partitions defined by the cuts
-	vertex_labels = [np.binary_repr(i,width=num_cuts) for i in range(2**num_cuts)]
-	#map each graph part label to a list of vertices inside of it
-	graph_part_label_vertices_map = gen_vertex_labels(A_star.shape[0],cuts,vertex_labels)
-	#our variables are what we assign to pairs of nodes that are inside, outside or crossing
-	#each of the k cuts
-	variables = list(itertools.product([0,1,2], repeat = num_cuts))
+def construct_node_partition(n,cuts):
+	'''Maps the partition of the graph defined by k cuts to the vertices
+
+	Returns:
+		vertex_labels - list of k-length bit vectors for each vertex
+			representing membership of each vertex to the k cuts 
+		graph_part_label_vertices_map - map of k-length bit vector label 
+			to vertices with that membership label 
+		variables - representation for each node pair partition defined by cuts 
+		capacity_dict - map of variables to number of node pairs 
+		capcities - list where ith entry denotes the number of node pairs
+			corrrespoinding to the ith variable 
+
+	Args:
+		n - number of vertices
+		cuts - list of k lists of vertices 
+
+	'''
+	k = len(cuts)
+	vertex_labels = [np.binary_repr(i,width=k) for i in range(2**k)]
+	graph_part_label_vertices_map = gen_vertex_labels(n,cuts,vertex_labels)
+	variables = list(itertools.product([0,1,2], repeat = k))
 	capacity_dict, capacities = gen_capacities(variables, graph_part_label_vertices_map)
 	return vertex_labels, graph_part_label_vertices_map, variables, capacity_dict, capacities
 
 
 
-def correct_cut_set(A,A_star,cuts,single, unif_update):
-	'''Correct the connectivity across each cut in cuts in graph defined by A 
-	to match the connectiivty in the graph defined by A_truth'''
-	'''(1) solve quadratic program to generate valid assignment to node pairs'''
-	'''(2) map this assignment to finer grained partition of node pairs'''
-	'''(3) update subgraphs to reflect this assignment'''
-	#Each pair is labeled with i in [3^k]. There are some number of edges defined
-	#by A_truth on each label let y_truth be the true assignment. 
-	#y be the assignment of A
-	#There are 3k constraints for the connectivity if single is false, k otherwise.
-	#We find the solution that matches the connectivit constraints that is 
-	#valid (positive, does not surpass capacity of node pairs) that is closest to y 
-	vertex_labels, graph_part_label_vertices_map, variables, capacity_dict, capacities = construct_node_partition(A,A_star,cuts)
-	num_cuts = len(cuts)
-	#given a graph, we can compute the graph's assignment to each of the variables
-	y_star = np.array(gen_assignment(A_star,graph_part_label_vertices_map,variables))
+def correct_cut_set(A,A_truth,cuts,single, unif_update):
+	'''Correct each cut in cuts in A to match A_truth
+
+	Returns corrected A and a list indicating if each cut in cuts was heavy or not with 1 or 0
+
+	Args:
+		A - probabilistic adjacency matrix 
+		A_truth - adjacency matrix of template graph 
+		cuts - list of lists of vertices 
+		single - Boolean flag for whether or not to use single constraint.
+			If False, use triple.
+		unif_update - Boolean flag for wheter or not to use uniform update. 
+			If false, use psuh update.
+	'''
+	vertex_labels, graph_part_label_vertices_map, variables, capacity_dict, capacities = construct_node_partition(A_truth.shape[0],cuts)
+	y_star = np.array(gen_assignment(A_truth,graph_part_label_vertices_map,variables))
 	y_prime = np.array(gen_assignment(A,graph_part_label_vertices_map,variables))
-	#optimize for new assignment
-	y, heavy = gen_opt_assignment(num_cuts, y_star, y_prime, variables, capacities, single)
+	assert(len(variables) == 3**len(cuts))
+	y, heavy = gen_opt_assignment(len(cuts), y_star, y_prime, capacities, single, variables) #optimize for new assignment
 	diff = dict(zip(variables,y - y_prime))
 	current = dict(zip(variables,y_prime))
 	new_sol = dict(zip(variables,y))
 	A_before = np.copy(A)
 	'''Compute amount to add/remove from subgraphs defined by node partition pairs'''
-	print('sub graph assignment')
 	pair_weight_all, sub_graphs_all = sub_graph_assignment(A,diff,current,new_sol,graph_part_label_vertices_map,variables,unif_update)
 	'''Update subgraphs in matrix'''
-	print('update subgraphs')
 	A_temp = update_sub_graphs(A, pair_weight_all, sub_graphs_all, graph_part_label_vertices_map, unif_update)
 	'''Correct for any errors in QP'''
 	overflow = A_before.sum() - A_temp.sum()
-	print(overflow)
 	np.fill_diagonal(A_temp,1)
 	A = update_helper(A_temp, overflow)
 	np.fill_diagonal(A,0)
-	print(gen_assignment(A_star,graph_part_label_vertices_map,variables))
-	print(gen_assignment(A,graph_part_label_vertices_map,variables))
 	return A, heavy
 
 
 def gen_cuts(cut_params, num_cuts, A):
-	'''Generate num_cuts specified by paramaters in cut_params'''
-	'''Return list of cuts and their complements'''
+	'''Generate num_cuts specified by paramaters in cut_params
+
+	Return list of cuts and their complements
+
+	Args:
+		cut_params - dictionary of cut sampling paramaters
+		num_cuts - number of cuts to sample 
+		A - probabilistic adjacency matrix 
+	'''
 	cut_gen = cut_params['opt']
 	independent = cut_params['independent']
 	cuts = []
 	cuts_comp = []
 	n = A.shape[0]
-	'''Set up needed'''
 	if cut_gen == 'grasp':
 		f = cut_params['f']
 		f_global = cut_params['f_global']
 		g = cut_params['g']
-		'''How many nodes to initialize grasp'''
 		frac_nodes_init = cut_params['frac_nodes_init']
-		'''Size of sub-sample of neighborhood used in grasp approximation'''
 		grasp_neighborhood_size = cut_params['grasp_neighborhood_size']
 		assert(grasp_neighborhood_size <= 1.0)
 		num_grasp_repeats = cut_params['num_grasp_repeats']
 		neighborhood_size = int(n*grasp_neighborhood_size)
-		'''Neighborhood sub-set sampling'''
 		out_graph, in_graph, out_neighbors, in_neighbors = sample_neighborhood_subset(n, neighborhood_size,A,A,[np.arange(n)]*n,n)
 	elif cut_gen == 'goemmans-williams':
 		G = nx.from_numpy_matrix(A)
@@ -1212,7 +1285,6 @@ def gen_cuts(cut_params, num_cuts, A):
 				c = list(c_set)
 				c_comp = list(c_comp_set)
 			elif cut_gen == 'goemmans-williams':
-				print('independent gw')
 				sdp_cut = cvxgr.algorithms.goemans_williamson_weighted(G)
 				c = list(sdp_cut.left)
 				c_comp = list(sdp_cut.right)
@@ -1220,35 +1292,28 @@ def gen_cuts(cut_params, num_cuts, A):
 				print(error_cut_gen_not_impl)
 			cuts.append(c)
 			cuts_comp.append(c_comp)
-	else:
-		#generate recursively
+	else: #generate recursively
 		partitions = []
 		while (len(partitions) < num_cuts):
 			if partitions == []:
 				if cut_gen == 'grasp':
-					print('recursive grasp initial split')
 					c_set, c_comp_set = grasp(A,out_graph,int(n*frac_nodes_init),num_grasp_repeats,f,f_global,g,out_neighbors,in_graph,in_neighbors,neighborhood_size)
 					partitions = [list(c_set),list(c_comp_set)]
 				elif cut_gen == 'goemmans-williams':
-					print('recursive gw')
 					sdp_cut = cvxgr.algorithms.goemans_williamson_weighted(G)
 					partitions = [list(sdp_cut.left),list(sdp_cut.right)]
 			else:
-				#going to need to cut partitions in gw partitions
 				partitions.sort(key=len,reverse=True)
 				cur_partitions = len(partitions)
 				num_to_divide = min(cur_partitions,num_cuts-cur_partitions)
 				partitions_temp = partitions[num_to_divide:]
 				for i in range(num_to_divide):
 					nodes = list(partitions[i])
-					B = A[nodes][:,nodes]
+					B = A[nodes][:,nodes] #compute sub-graph and generate cut of subgraph
 					if cut_gen == 'grasp':
 						n_prime = B.shape[0]
-						print('recursive grasp split partitition {} size {}'.format(i, n_prime))
 						neighborhood_size_prime = int(n_prime*grasp_neighborhood_size)
-						print('neighborhood size {}'.format(neighborhood_size_prime))
 						out_graph_prime, in_graph_prime, out_neighbors_prime, in_neighbors_prime = sample_neighborhood_subset(n_prime, neighborhood_size_prime,B,B,[np.arange(n_prime)]*n_prime,n_prime)
-						print('outgraph shape {}'.format(out_graph_prime.shape))
 						c_set, c_comp_set = grasp(B,out_graph_prime,int(n_prime*frac_nodes_init),num_grasp_repeats,f,f_global,g,out_neighbors_prime,in_graph_prime,in_neighbors_prime,neighborhood_size_prime)
 						left = [nodes[i] for i in list(c_set)]
 						right = [nodes[i] for i in list(c_comp_set)]
@@ -1267,88 +1332,92 @@ def gen_cuts(cut_params, num_cuts, A):
 	return cuts, cuts_comp
 
 
-def cut_sample_and_correct(A, A_truth, cut_method, num_cuts = 1, grasp_neighborhood_size = 1.0, passed_cuts =[]):
-	'''Sample num_cuts cuts to correct using cut_method and balance them'''
-	#Generate config
-	cut_params = gen_cut_correct_config(cut_method, grasp_neighborhood_size)
-	#Generate cuts 
-	cuts, cuts_comp = gen_cuts(cut_params, num_cuts-len(passed_cuts), A-A_truth)
-	cuts = cuts+passed_cuts
+def cut_sample_and_correct(A, A_truth, hyperparams, num_cuts = 1, grasp_neighborhood_size = 1.0, passed_cuts =[]):
+	'''Sample num_cuts cuts to correct and correct them in A 
+
+	Returns 
+		probailistic matrix A with num_cuts cuts corrected
+		list of bits for each cut that take 1 if cut sampled
+			has sum of entries crossing larger than A_truth 
+		list of cuts sampled 
+		list of the complements of cuts sampled
+
+	Args:
+		A - proposal probabilistic adjacency matrix 
+		A_truth - adjacency matrix template
+		hyperparams
+		num_cuts - number of cuts to sample before correcting (default 1)
+		grasp_neighborhood_size - fraction of neighbors to use for grasp (default 1.0)
+		passed_cuts - list of previously computed cuts (default is empty list)
+	'''
+	config = gen_cut_correct_config(hyperparams, grasp_neighborhood_size) 
+	cuts, cuts_comp = gen_cuts(config, num_cuts-len(passed_cuts), A-A_truth) #sample cuts
+	cuts = cuts+passed_cuts 
 	cuts_comp = cuts_comp + [complement([c],n) for c in passed_cuts]
 	cut_sets = [set(c) for c in cuts]
 	assert(len(cuts) == num_cuts)
-	#A has cuts corrected in cut_sets with respect to A_truth, high_list denotes
-	#if the cuts are heavy in A compared to A_truth
-	print('call to correct')
-	A, heavy_list = correct_cut_set(A,A_truth, cut_sets,cut_params['single'],cut_params['unifup'])
+	A, heavy_list = correct_cut_set(A,A_truth, cut_sets,config['single'],config['unifup']) #correct cuts
 	assert(len(heavy_list) == num_cuts)
 	return A, heavy_list, cuts, cuts_comp
 
 ''' MAIN METHOD '''
 
 
-def cut_correct_gen(m_header,num_cut_list,cut_method,A_truth,A_start,cut_stats,batch_size,grasp_neighborhood_size,start_target=0,passed_cuts=[]):
-	'''Sample cuts using cut_method and correct them. We record a list of models
-	after num_cuts in num_cut_list have been corrected'''
-	'''m_header: header for the cut corrected matrices we write to file '''
-	'''num_cut_list: record matrix after x cuts have been corrected for x in num_cut_list'''
-	'''cut_method: name of cut sampling/correcting algorithm'''
-	'''A_truth is the template graph'''
-	'''A_start is the matrix we are correcting'''
-	'''cut_stats are the statistics to collect on the cuts we correct'''
-	'''batch_size is the number of cuts to sample before correcting'''
-	'''grasp neighborhood size is the neighborhood size to use if using the grasp approximation for sampling cuts'''
-	print('CUT CORRECT METHOD {}'.format(cut_method))
-	#Num cuts should be increasing
-	num_cut_list = sorted(num_cut_list)
-	#results{stat_name -> {cuts_corrected: [stat_value]}}
-	results = defaultdict(dict)
-	#results are maps of cuts corrected (x) to a one element list of the statistic on the
-	#frequency matrix after x cuts have been corrected
+def cut_correct_gen(path,num_cut_list,hyperparams,A_truth,A_proposal,cut_stats,grasp_neighborhood_size,batch_size=1,start_target=0,passed_cuts=[]):
+	'''Sampe/correct cuts in A_proposal to match A_truth and write correct probabilistic 
+	adjacency matrices.
+
+	Returns list of probabilistic adjacency matrix statistics, 
+		map of statistics to results
+		and list of times it took to correct each cut (seconds).
+
+	Args:
+		path - file to write probabilistic adjacency matrices
+		num_cut_list - list of number of cuts to correct before writing
+		hyperparams - method for sampling/correcting
+		A_truth - adjacency matrix template graph
+		A_proposal - proposal probabilistic adjacency matrix 
+		cut_stats - list of statistics to compute on each sampled cut 
+		batch_size - number of cuts to sample before correcting (default is 1)
+		start_target - number of cuts to correct before writing first 
+			probabilistic adjacency matrix (default is 0)
+		passed_cuts - list of cuts previously sampled to correct
+
+	'''
+	num_cut_list = sorted(num_cut_list) #number of cuts should be increasing
+	results = defaultdict(dict) #map statistic name to map of cuts correct to value
 	batch_cut_correct_stats = ['l2_lin_freq','entropies','cut_results']
 	for x in batch_cut_correct_stats:
 		results[x] = defaultdict(list)
-		#cut results is treaed differently. It's  map of a cut property to a list
-		#of values for all cuts corrected
-	#initializations
 	num_targets = len(num_cut_list)
-	A = copy.deepcopy(A_start)
+	A = copy.deepcopy(A_proposal)
 	true_spec = utils.spectrum(A_truth)
 	num_corrections = 0
 	cuts_over_all_targets = []
 	assert(start_target <= num_targets)
 	assert(start_target >= 0)
 	times = []
-	#If we have not corrected any cuts yet, record the spectrum and entropy of the 
-	#input graph
-	if start_target == 0:
+	if start_target == 0: #if cuts corrected yet, record starting statistics
 		if num_cut_list[0]>0:
 			calls_to_correct = 0
 			results['l2_lin_freq'][0] = [utils.l2_lin_weight(utils.spectrum(A),true_spec)]
 			results['entropies'][0] = [np.mean(utils.entropy_m(A))]
-	else:
-		#Spectrum and entropy of input graph have already been recorded
+	else: #get previous number of cuts corrected
 		calls_to_correct = num_cut_list[start_target-1]
-	for i in range(start_target,num_targets):
-		num_cuts = int(num_cut_list[i])
-		#using correct balance for all frequencies
+	for i in range(start_target,num_targets): 
+		num_cuts_to_correct = int(num_cut_list[i])
 		A_prev = A
-		entropy_list = []
-		#Correct num cuts
-		while calls_to_correct < num_cuts:
-			#cut correct records statistics for the found 
+		while calls_to_correct < num_cuts_to_correct:
 			start_time = time.time()
 			A_prev = np.copy(A)
-			#Returns A with all cuts in cuts corrected with cuts of length batch_size.
-			A, high, cuts, cuts_comp  = cut_sample_and_correct(A, A_truth, cut_method, batch_size, grasp_neighborhood_size,passed_cuts)
+			A, high, cuts, cuts_comp  = cut_sample_and_correct(A, A_truth, hyperparams, batch_size, grasp_neighborhood_size,passed_cuts)
 			cuts_over_all_targets = cuts_over_all_targets+cuts
 			calls_to_correct = calls_to_correct + batch_size
 			assert(len(cuts)==batch_size)
-			for i in range(len(cuts)):
+			for i in range(len(cuts)): #record statistics on all cuts sampled
 				update_cut_results(A_prev,cuts[i],cuts_comp[i],high[i],cut_stats,results['cut_results'],A_truth)
 			times.append(time.time() - start_time)
-		#Record statistics on new frequency matrices
-		results['l2_lin_freq'][num_cuts] = [utils.l2_lin_weight(utils.spectrum(A),true_spec)]
-		results['entropies'][num_cuts] = [np.mean(utils.entropy_m(A))]
-		np.savetxt(m_header+'num_cuts_{}.txt'.format(num_cuts), A)
+		results['l2_lin_freq'][num_cuts_to_correct] = [utils.l2_lin_weight(utils.spectrum(A),true_spec)]
+		results['entropies'][num_cuts_to_correct] = [np.mean(utils.entropy_m(A))]
+		np.savetxt(path+'num_cuts_{}.txt'.format(num_cuts_to_correct), A)
 	return batch_cut_correct_stats, results, times	
