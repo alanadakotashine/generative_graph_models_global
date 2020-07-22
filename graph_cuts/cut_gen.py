@@ -869,55 +869,88 @@ def connectivity(A,S,u):
 	return conn_edges.sum()
 
 def comp_incoming_neighbors(outgoing,n,A):
-	'''outgoing is a list of lists. vth list is list of vs outgoing neighbors'''
-	'''Returns: incoming is a list of lists. vth list is list of vs incoming neighbors'''
-	'''incoming_neighbors_conn is list of lists containing connectivity of v to it's neighbors'''
+	'''Computes a list of incoming neighbors and the connectivity to them for each node 
+
+	Returns:
+		incoming_neighbors - list of incoming neighbor lists.
+			vth list is list of incoming neighbors of v  
+		incoming_neighbor_conn - list of incoming neighbor connectivity lists.
+			vth list is list of connectivity of v to its incoming neighbors 
+
+	Args:
+		outgoing - list of outgoing neighbor lists.
+			vth list is list of outgoing neighbors of v
+		n - number of nodes 
+		A - probabilistic adjacency matrix 
+	'''
+
 	incoming_neighbors = []
 	incoming_neighbors_conn = []
 	for i in range(n):
 		incoming_neighbors.append([])
 		incoming_neighbors_conn.append([])
-	#For each edge from  to v, add u to v's incoming neighbors
 	for i in range(n):
-		neighbors = outgoing[i]
+		neighbors = outgoing[i] #For each edge from i to j, add i to j's incoming neighbors
 		for j in neighbors:
 			incoming_neighbors[j].append(i)
 			incoming_neighbors_conn[j].append(A[i,j])
 	return incoming_neighbors, incoming_neighbors_conn
 
 def sample_neighborhood_subset_helper(A,A_sub,new_num_neighbors,cur_num_neighbors,cur_neighbors,n):
-	'''Sample new_num_neighbors from cur_neighhbors of for each node'''
-	'''neighbors is a list of neighbor lists'''
-	'''outgoing is the connectivity for each node to it's neighbors'''
+	'''Sample new_num_neighbors from cur_neighhbors of for each node
+
+	Returns:
+		neighbors - matrix of dimension n by new_num_neighbors.
+			vth row is list of neighbors of v 
+		outgoing - matrix of dimension n by new_num_neighbors.
+			vth row is list of connectivity of v to its new neighbors 
+
+	Args:
+		A - probabilistic adjacency matrix 
+		A_sub - matrix of dimension n by cur_num_neighbors
+			vth row is connectiivty of v to its current neighbors
+		new_num_neighbors, cur_num_neighbors - Integers. If 
+			new_num_neighbors is greater than cur_num_neighbors,
+			do nothing and return cur_neighbors and A_sub 
+		cur_neighbors - matrix of dimension n by cur_num_neighbors.
+			vth row is list of connectivity of v to its current neighbors 
+		n - number of nodes 
+	'''
 	assert(A_sub.shape[1] == cur_num_neighbors)
-	#Can't subsample
-	if new_num_neighbors >= cur_num_neighbors:
+	if new_num_neighbors >= cur_num_neighbors: #Can't subsample
 		return cur_neighbors, A_sub
 	else:
-		#add noise in case connectivity of node is zero
-		min_entry = max(np.min(np.abs(A_sub)),.0000000001)
+		min_entry = max(np.min(np.abs(A_sub)),.0000000001) #add noise in case connectivity of node is zero
 		abs_A_noise = np.abs(A_sub) + (min_entry/100.0)
 		Z = np.sum(abs_A_noise,axis=1).astype(float)
 		P = abs_A_noise/Z[:,None]
-		#initialize
 		neighbors = np.zeros((n,new_num_neighbors)).astype(int)
 		outgoing = np.zeros((n,new_num_neighbors))
 		for i in range(n):
-			#indices of the new neighbors in the cur neighbor lists
 			sub_sample = np.random.choice(cur_num_neighbors,new_num_neighbors,p=P[i],replace=False).astype(int)
-			#new neighbor lists
 			neighbors[i] = cur_neighbors[i][sub_sample]
-			#connectivity to new neighbors
 			outgoing[i] = A[i][neighbors[i]]
 	return neighbors, outgoing
 
 def sample_neighborhood_subset(n, sub_neighborhood_size, A, out_graph, out_neighbors, neighborhood_size):
-	'''n is the number of nodes'''
-	'''sub_neighborhood_size is the resulting number of outgoing neighbors for each node'''
-	'''A is the input graph'''
-	'''out_graph[u][v] is the connectivity of the uth node to it's vth outgoing neighbor '''
-	'''out_neighbors is a n length list of lists. the uth list contains the outgoing neighbors of u'''
-	'''neighborhood_size is the current number of outgoing neighbors for each node'''
+	'''Sample sub_neighborhood_size outgoing neighbors from 
+	each node's current neighborhood_size outgoing neighbors 
+	with the probability of each neighbor proportional to its connectivity in A 
+
+	Returns:
+		out_graph - vth row is connectivity of v to its outgoing neighbors 
+		in_graph - vth row is connectovity of v to its incoming neighbors 
+		out_neighbors - vth row is list of outgoing neighbors of v 
+		in_neighbors - vth row is list of incoming neighbors of v  
+
+	Args:
+		n - Integer, number of nodes 
+		sub_neighborhood_size - Integer, new number of neighbors 
+		A - probabilistic adjacency matrix 
+		out_graph - vth row is connectivity of v to its current outgoing neighbors 
+		out_neighbors - vth row is list of current outgoing neighbors of v 
+		neighborhood_size - Integer, current number of neighbors
+	'''
 	assert(A.shape[0] == n)
 	assert(A.shape[1] == n)
 	assert(out_graph.shape[1]==neighborhood_size)
@@ -927,18 +960,25 @@ def sample_neighborhood_subset(n, sub_neighborhood_size, A, out_graph, out_neigh
 	'''Incoming neighbors of v are all of the nodes that contain v as a neighbor'''
 	'''in_graph[u][v] is the connectivity of u to it's vth incoming neighbor '''
 	in_neighbors, in_graph = comp_incoming_neighbors(out_neighbors,n,A)
-	u = 5
-	v = out_neighbors[u][2]
 	return out_graph, in_graph, out_neighbors, in_neighbors
 
 
 def conn_list_init_help(A,outgoing_neighbors,S,S_comp, n, conn_list):
 	'''For each node i, compute its connectiivty to S,S_comp using only its
-	outgoing neighbors'''
-	#A is a n by n' matrix where n' is the number of outgoing neighbors
-	#outgoing_neighbors is a n by n' matrix listing the neighbors of each node
-	#S, S_comp lists the nodes in S and S_comp
-	#conn_list[:][i] is the connecitivty of i to S and S_comp
+	outgoing neighbors
+
+	Returns:
+		conn_list - two lists, one for S and the other for S_comp
+			vth entry is connectivity of v to S and S_comp
+
+	Args:
+		A - probabilistic adjacency matrix 
+		outgoing_neighbors - vth list is list of outgoing neighbors of v 
+		S, S_comp - bipartition of nodes 
+		n - number of nodes 
+		conn_list - two lists, one for S and the other for S_comp
+			vth entry is connectivity of v to S and S_comp
+	'''
 	for i in range(n):
 		neighbors_i = outgoing_neighbors[i]
 		num_neighbors = len(neighbors_i)
@@ -949,17 +989,34 @@ def conn_list_init_help(A,outgoing_neighbors,S,S_comp, n, conn_list):
 				conn_list[1][i] += A[i,j]
 	return conn_list
 
-def conn_list_init(S,S_comp,n,A,out_graph,f,out_neighbors,in_graph, in_neighbors, neighborhood_size,sub_neighborhood_size):
-	'''Store connectivity of each node to S and S_comp using only nodes it neighborhood'''
+def conn_list_init(S,S_comp,n,A,out_graph,out_neighbors,in_graph, in_neighbors, neighborhood_size,sub_neighborhood_size):
+	'''Sub sample neighborhoods and compute connectivity lists to S and S_comp
+
+	Returns:
+		conn_list - two lists, one for S and the other for S_comp
+			vth entry is connectivity of v to S and S_comp
+		in_neighbors - vth row is list of incoming neighbors of v  
+		out_neighbors - vth row is list of outgoing neighbors of v 
+		in_graph - vth row is connectovity of v to its incoming neighbors 
+		out_graph - vth row is connectivity of v to its outgoing neighbors 
+
+	Args:
+		S, S_comp - biparttion of vertices
+		n - number of vertices
+		A - probabilistic graph 
+		out_graph - vth list is connectivity of v to its out neighbors 
+		out_neighbors - vth list is list of out neighbors of v 
+		in_graph - vth list is connecitivyt of v to its incoming neighbors 
+		in_neighbors - vth list is list of in neighbors of v 
+		neighborhood_size - number of outgoing neighbors of each node 
+		sub_neighborhood_size - new number of outgoing neighbors of each node 
+	'''
 	conn_list = np.zeros((2,n))
-	'''If sub neighborhood size is at least current neighborhood size, no need to sub sample'''
-	if sub_neighborhood_size >= neighborhood_size:
-		#If sub neighbrhood size is n, use entire graph
-		if sub_neighborhood_size == n:
+	if sub_neighborhood_size >= neighborhood_size: #Can not subsample
+		if sub_neighborhood_size == n: #Compute connectivity list with entire graph
 			conn_list[0] = A[list(S),:].sum(axis=0)
 			conn_list[1] = A[list(S_comp),:].sum(axis=0)
-		#Compute which of neighbors of i are in S and which are in s_comp
-		else:
+		else: #Compute connectivity list 
 			conn_list = conn_list_init_help(out_graph,out_neighbors,S,S_comp, n, conn_list)
 		return conn_list, in_neighbors, out_neighbors, in_graph, out_graph
 	'''Else, sample sub_neighborhood_size neighbors from neighbors for each node'''
@@ -990,6 +1047,20 @@ def neg_cut_conn(A,S,S_comp):
 	return -1*(cut_conn(A,S,S_comp))
 
 def comp_candidate_local_improvement(n,g,conn_list,cur_score,bitS,bitS_comp):
+	'''
+	Returns:
+		list of nodes v such that function g of the connectivity
+		across is larger once we move v to/from cut S 
+
+	Args:
+		n - number of nodes 
+		g - function on connecitivyt 
+		conn_list - two lists, one for S and the other for S_comp
+			vth entry is connectivity of v to S and S_comp
+		cut_score - current connectivity across 
+		bitS - bit vector with 1 in vth entry if v is in S 
+		bitS_comp - bit vector with 1 in vth entry if v is not in S
+	'''
 	move_to_S_temp = cur_score + conn_list[1]-conn_list[0]
 	move_to_S = np.multiply(move_to_S_temp,bitS_comp)
 	move_from_S_temp = cur_score + conn_list[0]-conn_list[1]
@@ -1005,69 +1076,103 @@ def permute_cands(candidates):
 
 
 def local_cut_improvement_helper(candidates,conn_list,incoming,g,S,S_comp,cur_score,bitS,bitS_comp,incoming_neighbors):
+	'''
+	Move candidate nodes v from/to S if g of connectivity between S and S_comp increases. 
+	Visit nodes in random order 
+
+	Returns:
+		change - Boolean flag, True if S is changed by adding or removing a node
+		conn_list - two lists, one for S and the other for S_comp
+			vth entry is connectivity of v to S and S_comp
+		incoming - vth list is connectivity of v to its incoming neighbors 
+		S, S_comp - bipartition of nodes 
+		cur_score - current connectivity across 
+		bitS - bit vector with 1 in vth entry if v is in S 
+		bitS_comp - bit vector with 1 in vth entry if v is not in S
+
+	Args:
+		candidates - list of nodes 
+		conn_list - two lists, one for S and the other for S_comp
+			vth entry is connectivity of v to S and S_comp
+		incoming - vth list is connectivity of v to its incoming neighbors 
+		g - function on connecitivity
+		S, S_comp - bipartition of nodes 
+		cur_score - current connectivity across 
+		bitS - bit vector with 1 in vth entry if v is in S 
+		bitS_comp - bit vector with 1 in vth entry if v is not in S
+		incoming_neighbors - vth list is list of incoming neighbors of v
+	'''
+
 	change = False
 	num_candidates, rand_order = permute_cands(candidates)
 	for i in range(num_candidates):
 		v = candidates[rand_order[i]]
-		#check to make sure is still candidate
 		conn_v = conn_list[:,v]
-		#swap u if still a candidate
-		#print('checking if we should swap')
 		conn_S = conn_v[0]
 		conn_S_comp = conn_v[1]
-		if (v in S) and (g(cur_score + conn_S - conn_S_comp) > g(cur_score)):
+		if (v in S) and (g(cur_score + conn_S - conn_S_comp) > g(cur_score)): #check to make sure is still candidate
 			change = True
 			S.remove(v)
 			S_comp.add(v)
 			bitS[v]=0
 			bitS_comp[v]=1
 			cur_score = cur_score + conn_S - conn_S_comp
-		elif (v in S_comp) and (g(cur_score + conn_S_comp - conn_S) > g(cur_score)):
+		elif (v in S_comp) and (g(cur_score + conn_S_comp - conn_S) > g(cur_score)): #check to make sure is still candidate
 			change = True
 			S_comp.remove(v)
 			S.add(v)
 			bitS[v]=1
 			bitS_comp[v]=0
 			cur_score = cur_score + conn_S_comp - conn_S
-		#update conn_list
-		#placement effects all the neighbors of v
 		if change == True:
-			conn_list = update_conn_list(conn_list, incoming, v, S, incoming_neighbors)
+			conn_list = update_conn_list(conn_list, incoming, v, S, incoming_neighbors) #update conn_list
 	return change, conn_list, S, S_comp, cur_score, bitS,bitS_comp
 
 
 
 
-def local_cut_improvement(A,S,S_comp,n,incoming,f,g,f_global,conn_list,bitS,bitS_comp,neighbors, cycle_length = 10):
-	'''S and S_comp are sets'''
-	'''conn_list maps every vertex to f(v,S) and f(v,S_comp)'''
-	'''Make local improvements to S,S_comp by moving vertices such that 
-	f_global(A,S,S_comp) incraeses'''
+def local_cut_improvement(A,S,S_comp,n,incoming,f,g,f_global,conn_list,bitS,bitS_comp,in_neighbors, cycle_length = 10):
+	'''
+	Move nodes v from/to S if g of connectivity between S and S_comp increases. 
+
+	Returns:
+		S, S_comp - bipartition of nodes 
+
+	Args:
+		A - probabilistic adjacency matrix 
+		S, S_comp - bipartition of nodes 
+		n - number of nodes 
+		candidates - list of nodes 
+		incoming - vth list is connectivity of v to its incoming neighbors 
+		f - connectivity of node to set of nodes 
+		g - function of connecivity 
+		f_global - connectivity between two sets of nodes 
+		conn_list - two lists, one for S and the other for S_comp
+			vth entry is connectivity of v to S and S_comp
+		bitS - bit vector with 1 in vth entry if v is in S 
+		bitS_comp - bit vector with 1 in vth entry if v is not in S
+		in_neighbors - vth list is list of incoming neighbors of v
+		cycle_length - Integer, number of previous candidate lists to 
+			consider when detecting cycles 
+			(default is 10)
+	'''
 	cur_score = f_global(A,S,S_comp)
 	candidates = comp_candidate_local_improvement(n,g,conn_list,cur_score,bitS,bitS_comp)
-	#maintain previous candidate list to detect cycles
-	candidates_prev = [candidates]
+	candidates_prev = [candidates] #maintain previous candidate list to detect cycles
 	change = True
 	k = 0
 	max_changes = 100
 	while (change and (k < max_changes)):
 		change = False
-		#loop through candidates to find local improvements. Must be able to compute the effect
-		#of switching v from g(f(v,S)) and g(f(v,S_comp))
-		change, conn_list, S, S_comp, cur_score,bitS,bitS_comp = local_cut_improvement_helper(candidates,conn_list,incoming,g,S,S_comp,cur_score,bitS,bitS_comp,neighbors)
+		change, conn_list, S, S_comp, cur_score,bitS,bitS_comp = local_cut_improvement_helper(candidates,conn_list,incoming,g,S,S_comp,cur_score,bitS,bitS_comp,in_neighbors)
 		k = k+1
 		if change == True:
 			candidates = comp_candidate_local_improvement(n,g,conn_list,cur_score,bitS,bitS_comp)
-			#if candidates have already been seen, break
-			if np.any([np.array_equal(i,candidates) for i in candidates_prev]):
+			if np.any([np.array_equal(i,candidates) for i in candidates_prev]): #if candidates have already been seen, break
 				break
-		#if the length of candidates is longer than the cycle length, no need to 
-		#keep track of the first candidate in candidates_prev
 		if len(candidates_prev) == cycle_length:
 			candidates_prev.pop(0)
-		#save current set of candidates
 		candidates_prev.append(candidates)
-		#if we moved at least one vertex as measured by chage, repeat
 	return (S,S_comp)
 
 def assignment_conn_list(inc,dec,incIndex,decIndex,conn_list,incoming,v,incoming_neighbors):
@@ -1104,7 +1209,7 @@ def greedy_place(A,out_graph,s,f,g,out_neighbors,in_graph,in_neighbors,n,neighbo
 	#conn_list constists of two lists of length n
 	#where the vth entry maps f(v,S(N(v))) where  S(N(v)) are the elements of 
 	#of S that intersect N(v) which is the set of the neighbors of v
-	conn_list, in_neighbors, out_neighbors, in_graph, out_graph = conn_list_init(S,S_comp,n,A,out_graph,f,out_neighbors,in_graph,in_neighbors,neighborhood_size,sub_neighborhood_size)
+	conn_list, in_neighbors, out_neighbors, in_graph, out_graph = conn_list_init(S,S_comp,n,A,out_graph,out_neighbors,in_graph,in_neighbors,neighborhood_size,sub_neighborhood_size)
 	'''Greedily place v with S/S_comp that maximizes g'''
 	rand_order = np.random.permutation(n)
 	bitS = np.zeros(n)
