@@ -386,9 +386,11 @@ def test_gen_cuts():
 	print(cut_conn(A,c,c_comp))
 	print(np.abs(cut_conn(A_truth-A,c,c_comp)))
 
-
-
-
+def test_update():
+	X = update_helper(np.array([[.1,.7],[.7,.5]]), .2, True)
+	Y = update_helper(np.array([[.1,.7],[.7,.5]]), .2, False)
+	print(X)
+	print(Y)
 
 '''CUT FIX GENERATON'''
 '''Helpers for computing valid assignment for cut constraint '''
@@ -642,15 +644,25 @@ def update_helper(sub_graph, diff,unif_update=False):
 	assert(np.abs((total_before + diff) - sub_graph.sum()) <= t_first)
 	return sub_graph
 
-def remove_add_space_norm(pairs,A,vertex_labels,delta):
-	'''Map the node partition pairs to the amount the space they have left
-	to add mass, the amount of mass they have to remove, the number of pairs
-	and the matrix itself defined by the pair of nodes.'''
+def remove_add_space_norm(node_partition_pairs,A,vertex_labels, delta):
+	'''Return:
+		add_space - map of each node partition pair to size - mass
+		remove_space - map of each node paritition pair to mass 
+		sub_graph_size - map of each node partitition pair to the number of node pairs (size) 
+		sub_graphs - map of each node partition pair to its sub matrix in A
+
+	Args:
+		node_partition_pairs - pairs of node partitions 
+		A - probabilistic adjacency matrix 
+		vertex_labels - map of node partitions to list of vertices
+		delta - amount adding 
+
+	'''
 	add_space = {}
 	remove_space = {}
 	sub_graph_size = {}
 	sub_graphs = {}
-	for (x,y) in pairs:
+	for (x,y) in node_partition_pairs:
 		v1 = vertex_labels[x]
 		v2 = vertex_labels[y]
 		sub_graph = A[v1][:,v2]
@@ -659,28 +671,37 @@ def remove_add_space_norm(pairs,A,vertex_labels,delta):
 		else:
 			sub_graph_size[(x,y)] = max(1.0,float(len(v1)*len(v2)))
 		sub_graphs[(x,y)] = sub_graph
-		#prior_sums.append(sub_graph.sum())
-		#self loops
 		remove_space[(x,y)] = sub_graph.sum()
 		if v1 == v2:
 			if delta > 0:
-				#Fill diagonal with 1 so there is no space to add, will remove after we 
-				#update subgraph
-				np.fill_diagonal(sub_graph,1)
+				np.fill_diagonal(sub_graph,1) #self loops
 		add_space[(x,y)] = (1-sub_graph).sum()
 	return add_space, remove_space, sub_graph_size, sub_graphs
 
-def comp_subgraph_values(add_space, remove_space, sub_graph_size, delta, pairs):
-	'''Weight each pair of node partitions inversely proportional to the amount of space
-	we have to add/remove to give heavy/light pairs more to add/more to remove. '''
-	#pair_weights is a list of tuples from the pairs of vertices to the amount of 
-	#space the subgrpah has to add/remove mass normalized by the size of the subgraph
+def comp_subgraph_values(add_space, remove_space, sub_graph_size, delta, node_partition_pairs):
+	'''Compute weight equal to a fraction of delta for each sub graph defined by each pair of 
+	node partitions where weight is inversely proportional to add_space/remove_space for 
+	positive/negative delta.
+
+	Returns:
+		pair_values - map of node partition pair to 
+			fraction of delta which is proportional to weight to add
+		sorted_pair_weights - list of tuples of node partition pair to weight 
+			sorted by decreasing value
+
+	Args:
+		add_space - map of pair of node_partitons to size - mass 
+		remove_space - map of pair of node_partitions to mass
+		sub_graph_size - map of node pair partitions to number of node pairs (size) 
+		delta - amount to add 
+		node_partition_pairs - list of pairs of node partitions
+	'''
 	if delta > 0:
 		#adding, want to add to values that have most of the edges filled.
-		pair_weights = [((x,y),remove_space[(x,y)]/sub_graph_size[(x,y)]) for (x,y) in pairs]
+		pair_weights = [((x,y),remove_space[(x,y)]/sub_graph_size[(x,y)]) for (x,y) in node_partition_pairs]
 	else:
 		#removing, want to remove from values that have most of the edges empty.
-		pair_weights = [((x,y),add_space[(x,y)]/sub_graph_size[(x,y)]) for (x,y) in pairs]
+		pair_weights = [((x,y),add_space[(x,y)]/sub_graph_size[(x,y)]) for (x,y) in node_partition_pairs]
 	total_value = sum([x[1] for x in pair_weights])
 	#if space is zero on all pairs, assign same value to all
 	if total_value == 0:
@@ -689,7 +710,6 @@ def comp_subgraph_values(add_space, remove_space, sub_graph_size, delta, pairs):
 			new_pair_weights[pair] = 1
 		pair_weights = new_pair_weights.items()
 		total_value = sum([x[1] for x in pair_weights])
-	#use the weight to assign the value to add/remove to each set of pairs
 	sorted_pair_weights = sorted(pair_weights, key = lambda x: x[1], reverse=True)
 	pair_values = {}
 	for ((x,y),v) in sorted_pair_weights:
@@ -699,10 +719,20 @@ def comp_subgraph_values(add_space, remove_space, sub_graph_size, delta, pairs):
 
 
 def comp_pair_weight(pairs,A,delta,vertex_labels):
-	'''Assign pair of node sets mass to add/remove proportional to their value conditoned
-	on not adding more than there is space or removing more than there is already mass 
-	assgigned.'''
-	add_space, remove_space, sub_graph_size, sub_graphs = remove_add_space_norm(pairs,A,vertex_labels, delta)
+	'''Return:
+		pair_values - map of pair of node partitions to 
+			amount to add to subgraph defined by pair 
+		sub_graphs - map of pairs of node partitions to 
+			submatrix of A defined by pair
+
+	Args:
+		pairs - list of pairs of node partitions 
+		A - probabilistic adjacency matrix 
+		delta - total amount to add to all subgraphs 
+			defined by each pair of node parititons in pairs
+		vertex_labels - map of node partition to list of nodes
+	'''
+	add_space, remove_space, sub_graph_size, sub_graphs = remove_add_space_norm(pairs,A,vertex_labels,delta)
 	pair_values, sorted_pair_weights = comp_subgraph_values(add_space, remove_space, sub_graph_size, delta, pairs)
 	surplus = 0
 	#barometer to complete
@@ -729,23 +759,30 @@ def comp_pair_weight(pairs,A,delta,vertex_labels):
 	return pair_values, sub_graphs
 
 
-def sub_graph_assignment(A,diffs,current,new_sol,variable_vertex_map,variables,unif_update=False):
-	'''Diffs tells us how much each of the variabels change from the current solution
-	to the new solution'''
-	'''variables: list of the node pair partition representation'''
-	'''vertex_labels: map of node partition representations to vertices in those partitions'''
-	'''Returns pair_weight_all: Map of pairs of node partitions to how much to add/remove 
-	from subgraph defined by pair of node partitions'''
-	'''Returns sub_graphs_all: Map of pairs of node partitions to the adjacency matrix of the subgraph
-	defined by the pair of node partitions'''
-	capacities, _ = gen_capacities(variables,variable_vertex_map)
+def sub_graph_assignment(A,diffs,current,node_part_label_vertices_map,capacities,unif_update=False):
+	'''
+	Return:
+		pair_weight_all - map of pairs of node partitions to how much to add/remove 
+			from submatrix defined by pair of node partitions 
+		sub_graphs_all - map of pairs of node partitions to 
+			the submatrix defined by the pair of node partitions
+
+	Args:
+		A - probabilistic adajcency matrix 
+		diffs - map of node pair partition to amount to add 
+		current - map of node pair partition to mass in A 
+		node_part_label_vertices_map - map of node partition to list of nodes 
+		capacities - map of node pair partition to amount of node pairs total 
+		unif_update - Boolean flag (default False). If True, use uniform update
+			Otherwise, use push update
+	'''
+	
 	pair_weight_all = {}
 	sub_graphs_all = {}
 	for var in diffs:
 		diff = diffs[var]
 		capacity = capacities[var]
 		cur = current[var]
-		new_val = new_sol[var]
 		#adjust diff to ensure we aren't removing more than there is or adding beyond capacity
 		if diff < 0:
 			diff_actual = max(-1*(cur),diff)
@@ -753,17 +790,28 @@ def sub_graph_assignment(A,diffs,current,new_sol,variable_vertex_map,variables,u
 			diff_actual = min(capacity - cur, diff)
 		if (np.abs(diff) > 0):
 			if np.abs(diff_actual) > 0:
-				pairs = var_to_node_part_pair_reps(var) #list of pairs of node partitions in node pair partition
-				#how much to add/remove from each sub-graph depends
-				#on how much space it has
-				pair_weight, sub_graphs = comp_pair_weight(pairs,A,diff_actual,variable_vertex_map)
+				pairs = var_to_node_part_pair_reps(var) #Each node pair partition maps to multiple pairs of node partitions
+				pair_weight, sub_graphs = comp_pair_weight(pairs,A,diff_actual,node_part_label_vertices_map)
 				pair_weight_all.update(pair_weight)
 				sub_graphs_all.update(sub_graphs)
 	return pair_weight_all, sub_graphs_all
 
 def update_sub_graphs(A, pair_weight_all, sub_graphs_all, vertex_labels, unif_update=False):
-	'''This updates A to the new solution by updating the subgraphs each of the variabels maps to
-	by diff value'''
+	'''
+
+	Return:
+		A - updated A with weight added for each pair of node partititions to its 
+			corresponding sub matrix 
+
+	Args:
+		A - probabilistic adjacency matrix 
+		pair_weight_all - map of pair of node partitions to weights 
+		sub_graphs_all - map of pair of node partitions to its submatrix 
+		vertex_labels - map of node parititon to list of vertices 
+		unif_update - Boolean flag (default False). If True, use uniform update.
+			Else, use push update.
+
+	'''
 	pairs = list(pair_weight_all.keys())
 	num_pairs = len(pairs)
 	for i in range(num_pairs):
@@ -785,14 +833,21 @@ def update_sub_graphs(A, pair_weight_all, sub_graphs_all, vertex_labels, unif_up
 
 '''cut sampling helpers'''	
 def random_place(n,i):
-	#print('random choose {} from {}'.format(i,n))
+	'''Randomly place i of the integers from 1 to n into 
+	two sets S and S_comp.
+
+	Return:
+		S - set of integers. 
+		S_comp - set of integers. 
+
+	Args:
+		n - positive integer 
+		i - positive integer, assumed to be at most n. '''
 	assert(i<=n)
-	#Randomly permute nodes
+	assert(i>=0)
 	rand_order = np.random.permutation(range(n))
 	S = set([rand_order[0]])
 	S_comp = set([rand_order[1]])
-	#flip coin for first i nodes in the sequence to place
-	#in S or S_comp
 	for j in range(2,i):
 		p = np.random.binomial(1,.5)
 		if p == 1:
@@ -1261,10 +1316,9 @@ def correct_cut_set(A,A_truth,cuts,single, unif_update):
 	y, heavy = gen_opt_assignment(len(cuts), y_star, y_prime, capacities, single, variables) #optimize for new assignment
 	diff = dict(zip(variables,y - y_prime))
 	current = dict(zip(variables,y_prime))
-	new_sol = dict(zip(variables,y))
 	A_before = np.copy(A)
 	'''Compute amount to add/remove from subgraphs defined by node partition pairs'''
-	pair_weight_all, sub_graphs_all = sub_graph_assignment(A,diff,current,new_sol,node_part_label_vertices_map,variables,unif_update)
+	pair_weight_all, sub_graphs_all = sub_graph_assignment(A,diff,current,node_part_label_vertices_map,capacity_dict,unif_update)
 	'''Update subgraphs in matrix'''
 	A_temp = update_sub_graphs(A, pair_weight_all, sub_graphs_all, node_part_label_vertices_map, unif_update)
 	'''Correct for any errors in QP'''
