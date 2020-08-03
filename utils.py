@@ -15,12 +15,13 @@ from sklearn.cluster import SpectralClustering
 
 ######SLEM CODE##############
 
-#Code adapted from yang to accomodate a weighted adjacency matrix
-# @mastersthesis{yang2015numerical,
-#  title={Numerical Methods for Solving the Fastest Mixing Markov Chain Problem},
-#  author={Yang, Yang Kjeldsen},
-#  year={2015}
-#}
+'''Code adapted from yang to accomodate a weighted adjacency matrix
+ @mastersthesis{yang2015numerical,
+  title={Numerical Methods for Solving the Fastest Mixing Markov Chain Problem},
+  author={Yang, Yang Kjeldsen},
+  year={2015}
+}
+'''
 
 def tp_rw_matrix_weighted ( graph, W) :
     '''Compute standard random walk matrix 
@@ -189,9 +190,17 @@ def fast_mix_transition_matrix_slem(A):
 #GRAPH UTILS#
 
 def shortestpath(A,G=None, cutoff = 100):
-    '''Compute sorted list of shortest path lenghts up to 
-    length cutoff apart from graph defined
-    by A.'''
+    '''Return sorted list of shortest path lengths up to 
+    length cutoff from graph defined
+    by adjacency matrix A.
+
+    Args:
+
+    A -- adjacency matrix 
+    G -- graph defined by adjacency matrix (default is None)
+    cutoff -- longest path length to compute (default is 100) 
+
+    '''
     if G is None:
         G = nx.from_numpy_matrix(A).to_undirected()
     #Returns map of nodes to their shortest path lengths to all nodes in the graphs
@@ -204,8 +213,15 @@ def shortestpath(A,G=None, cutoff = 100):
     return sorted(shortestPathLengths)
 
 def cc(A,G=None):
-    '''Compute sorted list of clustering coefficients for each node in G
-    defined by A'''
+    '''Return sorted list of clustering coefficients for each node in G
+    defined by A
+
+    Args:
+
+    A -- adjacency matrix 
+    G -- graph defined by adjacency matrix (default is None)
+
+    '''
     if G is None:
         G = nx.from_numpy_matrix(A).to_undirected()
     clustering_coefficient = nx.clustering(G)
@@ -213,7 +229,13 @@ def cc(A,G=None):
     return sorted(clustering_coefficient)
 
 def assort(A,G=None):
-    '''Compute assortativity of graph G defined by A. If A is empty, return 1 '''
+    '''Compute assortativity of graph G defined by A. If A is empty, return 1 
+    Args:
+
+    A -- adjacency matrix 
+    G -- graph defined by adjacency matrix (default is None)
+
+    '''
     if A.sum() == 0:
         return 1
     if G is None:
@@ -222,7 +244,15 @@ def assort(A,G=None):
 
 def betweenness(A,G=None,approx_factor = 100):
     '''Approximate betweenness for each node using approx_factor
-    number of nodes as pivots, see networkx for more details. '''
+    number of nodes as pivots, see networkx for more details. 
+
+    Args:
+
+    A -- adjacency matrix 
+    G -- graph defined by adjacency matrix (default is None)
+    approx_factor -- longest path length to compute (default is 100) 
+
+    '''
     if G is None:
         G = nx.from_numpy_matrix(A).to_undirected()
     num_k = min(approx_factor,A.shape[0])
@@ -230,14 +260,19 @@ def betweenness(A,G=None,approx_factor = 100):
     return sorted(b_dict.values())
 
 def connected_component_subgraphs(G):
-    '''Generator for connected components in graph G'''
+    '''Returns generator for connected components in graph G'''
     for c in nx.connected_components(G):
         yield G.subgraph(c)
 
 def lcc(A,G=None):
-    '''Compute largest connected component in graph 
-    G defined by A, return networkx graph of 
-    largest connected component'''
+    '''Return largest connected component in graph 
+    G defined by A
+    Args:
+
+    A -- adjacency matrix 
+    G -- graph defined by adjacency matrix (default is None)
+
+    '''
     if G is None:
         G = nx.from_numpy_matrix(A).to_undirected()
     LCC = max(connected_component_subgraphs(G), key=len)
@@ -245,17 +280,35 @@ def lcc(A,G=None):
 
 def size_lcc(A,G=None):
     '''Number of nodes in largest connected component in graph
-    G defined by A'''
+    G defined by A
+
+    Args:
+
+    A -- adjacency matrix 
+    G -- graph defined by adjacency matrix (default is None)
+
+    '''
     LCC = lcc(A,G)
     return len(LCC.nodes())
 
 def centralityVector(A):
-    '''Compute eigenvector corresponding to the largest eigenvalue in A'''
+    '''Return eigenvector corresponding to the largest eigenvalue in A
+
+    Args:
+
+    A -- adjacency matrix 
+
+
+    '''
     return kthEigenVector(A,A.shape[0]-1)
 
 def degree_sequence(A):
     '''Compute degree sequene of G defined by A. 
-    If A is fractional, all posive entries are included as edges'''
+    Args:
+
+    A -- adjacency matrix 
+
+    '''
     G = nx.from_numpy_matrix(A).to_undirected()
     degree_sequence = sorted(dict(G.degree()).values())
     return degree_sequence
@@ -264,22 +317,36 @@ def degree_sequence(A):
 ######DISTRIBUTION AND VECTOR METRICS######
 
 
-def genDiscDist_simple(values,slist):
-    '''Compute fraction of entries in slist that take 
-    each value in values'''
+def gen_hist(values,slist):
+    '''Return list of fraction of entries in slist that take 
+    each value in values
+
+    Args:
+
+    values -- list of floats
+    slist -- list of floats 
+
+    '''
     slist = sorted(slist)
     values = sorted(values)
     numValues = len(values)
-    lenList = len(slist)
+    lenList = float(len(slist))
     result = [0]*numValues
     for v in range(numValues):
         cnt = slist.count(values[v])
-        result[v]=cnt/float(lenList) 
+        result[v]=cnt/lenList
     return result
 
 def emdLinear(hist1,hist2,values):
     '''Given two histograms on a list of sorted values,
-    compute the earth mover's distance between the two histograms.'''
+    compute the earth mover's distance between the two histograms.
+
+    Args:
+
+    hist1, hist2 -- histograms
+    values - sortest list of values that the histograms are on.
+
+    '''
     assert(values == sorted(values))
     numBins = len(hist1)
     assert(len(hist2) == numBins)
@@ -292,15 +359,24 @@ def emdLinear(hist1,hist2,values):
     return totalDist
 
 def emd(x,y):
-    '''Compute histograms of x and y on the union of their values.'''
-    '''Return emd between two histograms'''
-    totalValues = sorted(list(set().union(x,y)))
-    x_dist = genDiscDist_simple(totalValues,sorted(x))
-    y_dist = genDiscDist_simple(totalValues,sorted(y))
-    return emdLinear(x_dist,y_dist,totalValues)
+    '''Return emd between histograms defined by lists of floats x and y.
+
+    Args:
+    x,y -- lists of floats'''
+    totalValues = sorted(list(set().union(x,y))) #Union of values in x and y
+    x_dist = gen_hist(totalValues,sorted(x)) #histogram for x on totalValues
+    y_dist = gen_hist(totalValues,sorted(y)) #histogram for y on totalValues
+    return emdLinear(x_dist,y_dist,totalValues) #compute emd between histograms
 
 def l2_exp_weight(x,y):
-    n = len(x)
+    '''Returns sum of squared differences between ith entries of x and y
+    weighted exponentially by 1/e^i
+
+    Args:
+    x,y -- lists of floats 
+
+    '''
+    n = min(len(x),len(y))
     distance = 0
     for i in range(n):
         weight = np.exp(-1*i)
@@ -308,6 +384,13 @@ def l2_exp_weight(x,y):
     return distance
 
 def l2_lin_weight(x,y):
+    '''Returns sum of squared differences between ith entries of x and y
+    weighted linearly by 1/i
+
+    Args:
+    x,y -- lists of floats 
+
+    '''
     n = min(len(x),len(y))
     distance = 0
     for i in range(n):
@@ -316,10 +399,18 @@ def l2_lin_weight(x,y):
     return distance
 
 def l2_weight(x,y,k=None):
-    n = len(x)
+    '''Returns sum of squared differences between ith entries of x and y
+    weighted exponentially by 1/e^i
+
+    Args:
+    x,y -- lists of floats 
+    k -- cutoff (default is None)
+
+    '''
+    n = min(len(x),len(y))
     distance = 0
     weight = 1.0
-    if not k:
+    if k is None:
         stop = n
     else:
         stop = k
@@ -331,7 +422,12 @@ def l2_weight(x,y,k=None):
 #LAPLACIAN SPECTRA###########
 
 def sym_normalized_laplacian(A_input):
-    '''Compute symmetric normalized laplacian of A (A may be fractional)'''
+    '''Compute symmetric normalized laplacian of A (A may be fractional)
+
+    Args:
+    A_input -- adjacency matrix
+
+    '''
     A = np.asarray(A_input)
     n = A.shape[0]
     d = A.sum(axis=0)
@@ -341,18 +437,37 @@ def sym_normalized_laplacian(A_input):
     return L
 
 def specGap(A):
+    '''Return second smallest eigenvalue of the 
+    symmetirc normalized Laplacian of A
+
+    Args:
+    A -- adjacency matrix
+
+    '''
     L = sym_normalized_laplacian(A.astype(float))
     w,v = np.linalg.eig(L)
     w = sorted(w)
     return np.real(w[1])
 
 def smallest_nonzero_eig(A):
+    '''Returns smallest non-zero eigenvalue of the 
+    symmetric normalized Laplacian of A
+
+    Args:
+    A -- adjacency matrix
+
+    '''
     L = sym_normalized_laplacian(A.astype(float))
     w,v = np.linalg.eig(L)
     return min(w[w>1e-12])
 
 def spectrum(A):
-    '''Return eigenvaleus of symmetric normalized laplacian of A'''
+    '''Return eigenvaleus of symmetric normalized laplacian of A
+
+    Args:
+    A -- adjacency matrix
+
+    '''
     L = sym_normalized_laplacian(A.astype(float))
     w,v = np.linalg.eig(L)
     w = sorted(w)
@@ -360,7 +475,15 @@ def spectrum(A):
     return w
 
 def kthEigenVector(A,k):
-    '''Compute eigenvector corresponding to the kth smallest eigenvalue in A'''
+    '''Compute eigenvector corresponding to the kth smallest eigenvalue in A
+
+    Args:
+
+    A -- matrix 
+    k -- integer
+
+    '''
+    assert(k <= A.shape[0])
     w,v = np.linalg.eig(A)
     idx = np.argsort(w)
     v = v[:,idx]
@@ -368,13 +491,28 @@ def kthEigenVector(A,k):
     return vec.real
 
 def fiedlerVector(A):
+    '''Compute eigenvector corresponding to the second smallest eigenvalue 
+    of the symmetric normalized Laplacian of A
+
+    Args:
+
+    A -- matrix 
+
+    '''
     L = sym_normalized_laplacian(A.astype(float))
     return kthEigenVector(L,1)
 
 ####CONDUCTANCE#####
 
 def comp_complement(S,n):
-    '''Compute list of all the nodes in range(n) not in S'''
+    '''Return list of all the nodes in range(n) not in S
+
+    Args:
+
+    S -- list of nodes 
+    n -- number of nodes (int)
+
+    '''
     comp = []
     for i in range(n):
         if i not in S:
@@ -383,7 +521,13 @@ def comp_complement(S,n):
 
 def compConductance(S,S_comp,A):
     '''Compute the proportion of weight of pairs crossing between S and S_comp
-    to the minimum of weights among pairs in S/S_comp'''
+    to the minimum of sum of weights adjacenct to S/S_comp
+
+    Args:
+    S,S_comp -- bipartition of nodes 
+    A -- (Fractional) adjacency matrix
+
+    '''
     nodeSet = S + S_comp
     edges_S = A[S][:,nodeSet]
     edges_S_comp = A[S_comp][:,nodeSet]
@@ -393,54 +537,51 @@ def compConductance(S,S_comp,A):
 
 def compMinConductanceCut(u,A):
     '''Return vertex set S = {v} where v in S if u[v]>T where T is chosen so S has lowest 
-    conductance across all T in the set {u[v] for v in N}'''
+    conductance across all T in the set {u[v]}
+
+    Args:
+    u -- vector of floats
+    A -- adjacency matrix
+
+    '''
     n = len(u)
-    #Get indices of entries of u in sorted order
     idx = np.argsort(u)
     minConductance = 1
     clustering = [range(n),[]]
-    t = 1
-    for i in range(1,n-1):
+    for i in range(n-1):
         S = list(idx[:i+1])
         S_comp = list(idx[i+1:])
         c = compConductance(S,S_comp,A)
         if c < minConductance:
             minConductance = c 
             clustering = [S,S_comp]
-            t = i
-    T = u[idx[t+1]]
-    for i in clustering[0]:
-        assert(u[i]<=T)
     return clustering
 
 def compMaxConductanceCut(u,A):
     '''Return vertex set S = {v} where v in S if u[v]>T where T is chosen so S has largest 
-    conductance across all T in the set {u[v] for v in N}'''
+    conductance across all T in the set {u[v]}
+
+    Args:
+    u -- vector of floats
+    A -- adjacency matrix
+
+    '''
     n = len(u)
-    #Get indices of entries of u in sorted order
     idx = np.argsort(u)
     maxConductance = 0
     clustering = [range(n),[]]
-    t = 1
-    for i in range(1,n-1):
-        S = idx[:i+1]
-        S_comp = idx[i+1:]
+    for i in range(n-1):
+        S = list(idx[:i+1])
+        S_comp = list(idx[i+1:])
         c = compConductance(S,S_comp,A)
         if c > maxConductance:
             maxConductance = c 
             clustering = [S,S_comp]
-            t = i
-    T = u[idx[t+1]]
-    for i in clustering[0]:
-        assert(u[i]<=T)
     return clustering
 
 def total_variation_distance(x,y):
+    '''Return total variatin distance between histograms x and y'''
     return .5*np.sum(np.abs(x-y))
-
-
-
-
 
 
 
@@ -448,35 +589,51 @@ def total_variation_distance(x,y):
 ##MISC ##########
 
 def compNeighbors(edges, node_ixs, i):
-    '''edges is a list of pairs partitioned by each node.
-    node_ixs lists the start index of the edges in edges 
-    belonging to each  node '''
-    '''Return the neihgbors of the ith node'''
+    '''Return list of neighbors of the ith node
+
+    Args:
+
+    edges -- list of pairs partitioned by each node.
+    node_ixs -- list of start index of the pairs in edges 
+    belonging to each node
+
+    '''
     N = len(node_ixs)
     if i == N-1:
         nbs = edges[node_ixs[i]:,1]
     else:
-        #Get edges for the ith node. Return the neighbors
-        #of i
         nbs = edges[node_ixs[i]:node_ixs[i+1],1]
     return nbs
 
 def randWalkMatrix(edges, node_ixs):
-    '''Compute standard random walk tarnsition matrix.'''
-    '''Entry M[j,i] denotes the probability of moving from i to j'''
-    '''The columns of M are probability distributions'''
+    '''Compute standard random walk tarnsition matrix.
+
+    Args:
+
+    edges -- list of pairs partitioned by each node.
+    node_ixs -- list of start index of the pairs in edges 
+    belonging to each node
+    '''
     N = len(node_ixs)
     M = np.zeros([N,N])
     for i in range(N):
         nbs = compNeighbors(edges, node_ixs, i)
         num_nbs = len(nbs)
         for j in nbs:
-            #prob i move from i to j
-            M[j,i]=1/float(num_nbs)
+            M[j,i]=1/float(num_nbs) #probability of moving from i to j
     return M
 
 def vertexStateToEdgeStateTransition(P_v, edges, node_ixs):
-    '''Compute edge transitions from first order node transitions in P_v'''
+    '''Compute edge transitions from first order node transitions in P_v
+
+    Args:
+
+    P_v -- vertex state to vertex state transition probabilities 
+    edges -- list of pairs partitioned by each node.
+    node_ixs -- list of start index of the pairs in edges 
+    belonging to each node
+
+    '''
     N = P_v.shape[0]
     M = len(edges)
     P = np.zeros([M,M])
@@ -500,17 +657,24 @@ def vertexStateToEdgeStateTransition(P_v, edges, node_ixs):
 
 def secondOrderRandWalkMatrix(edges, node_ixs, p = 1, q = 1):
     '''Compute edge transition matrices with the Node2vec walk using
-    paramaters p,q'''
+    paramaters p,q
+
+    Args:
+
+    edges -- list of pairs partitioned by each node.
+    node_ixs -- list of start index of the pairs in edges 
+    belonging to each node
+    p,q -- node2vec paramaters (default p = q = 1)
+
+    '''
     N = len(node_ixs)
     M = len(edges)
     P = np.zeros([M,M])
     p = float(p)
     q = float(q)
-    #fill at the column for having just traveled i->j
     for edge_index in range(M):
-        [i,j] = edges[edge_index]
+        [i,j] = edges[edge_index] #fill at the column for having just traveled i->j
         prev_nbs = compNeighbors(edges, node_ixs,i)
-        #edes that start with j
         if j < N-1:
             neighbor_rows = range(node_ixs[j],node_ixs[j+1])
         else:
@@ -520,7 +684,7 @@ def secondOrderRandWalkMatrix(edges, node_ixs, p = 1, q = 1):
             [l,k] = edges[index,:]
             if l != j:
                 print(ERROR)
-            #compute probability I go from j to k
+            #compute probability traveling from j to k
             if k == i:
                 dist.append(1.0/p)
             elif k in prev_nbs:
@@ -552,25 +716,42 @@ def solveStationary( A ):
     return s
 
 def random_walk_w_matrix(N, rwlen, P, n_walks, p):
-    '''Build n_walks number of 
-    random walks of length rwlen using transition matrix P and combo_stationary
-    distribution p'''
+    '''Array of n_walks
+    random walks of length rwlen using transition matrix P with stationary distribution 
+    p on graph with N nodes 
+
+    Args:
+
+    N -- int, number of nodes 
+    rwlen -- int, number of  nodes on walk
+    P -- transition matrix, ith column is transition from node i 
+    n_walks -- int, number of walks 
+    p -- stationary distribution '''
     walk = []
     for t in range(n_walks):
-        i = np.random.choice(N,p=p)
+        i = np.random.choice(N,p=p) #start node from stationary distribution
         walk.append(i)
         for k in range(rwlen-1):
             p_ = list(P[:,i])
             total = sum(p_)
             p_ = [float(x)/total for x in p_]
-            p_ = [0 if x < 0 else x for x in p_]
-            i = np.random.choice(N, p=p_)
+            p_ = [0 if x < 0 else x for x in p_] #standardize column of P
+            i = np.random.choice(N, p=p_) #next node in walk
             walk.append(i)
     return np.array(walk)
 
 def gen_single_node(N,P, p, cur_node=None):
     '''Sample single node from stationary distribution p if cur_node is None, 
-    else walk from cur_node using transition probability matrix P'''
+    else walk from cur_node using transition probability matrix P
+
+    Args:
+
+    N -- int, number of nodes 
+    P -- transtition matrix, ith column is transition from node i 
+    p -- stationary distribution 
+    cur_node -- current node of walk, default is None.
+
+    '''
     if cur_node == None:
         cur_node = np.random.choice(N,p=p)
         return cur_node
@@ -585,24 +766,39 @@ def gnp(X):
     return G
 
 
-def normalize_mat(edge_probs, self_loops = True):
-    e = np.copy(edge_probs)
+def normalize_mat(E, self_loops = True):
+    '''Return normalized copy of E so that sum of entries
+    is equal to 1 
+
+    Args:
+    E -- matrix 
+    self-loops -- Boolean, if False diagonal is set to zero before normalization.
+        default is True'''
+    e = np.copy(E)
     if not self_loops:
         np.fill_diagonal(e, 0)
     e = (e / np.sum(e))
     return e
 
 def normMatrix_wsum(Mc,m,m_exact = True):
+    '''Return normalized copy of E so that sum of entries
+    is equal to m and no entry is larger than 1.
+
+    Args:
+    Mc -- matrix 
+    m -- int 
+    m_exact -- Boolean, if False the normalized version of the 
+        matrix with sum equal to 1 is multiplied by m and and all
+        entries above 0 are set to 1. If True, then entries that are not
+        eqaul to 1 continue to be rounded up until there are no entries 
+        left or matrix sum is equal to m '''
     M = np.array(copy.deepcopy(Mc))
-    #no self loops
     np.fill_diagonal(M,0)
     total = M.sum()
     n = M.shape[0]
     for i in range(n):
         for j in range(n):
-            #normalized weight
             M[i,j] = M[i,j]/total 
-    #desired
     M = M*m
     num_above = M[M>1].shape[0]
     M[M>1]=1
@@ -610,23 +806,24 @@ def normMatrix_wsum(Mc,m,m_exact = True):
         return M
     #increase all edges that are not maxed out at 1
     while M.sum() < m-.001:
-        #what we want edges below 1 to add up to
-        amount_left = m-M[M>=1].sum()
-        #current total
-        total = M[M<1].sum()
-        #if all entries less than 1 are 0, break
-        if (len(M[M<1])-len(M[M<=0])) == 0:
+        amount_left = m-M[M>=1].sum() #what we want edges below 1 to add up to
+        total = M[M<1].sum() #current total
+        if (len(M[M<1])-len(M[M<=0])) == 0: #if all entries less than 1 are 0, break
             break
         for i in range(n):
             for j in range(n):
                 if M[i,j] < 1:
-                    #normalized weight * desired
-                    M[i,j] = (M[i,j]/total)*amount_left 
+                    M[i,j] = (M[i,j]/total)*amount_left #normalized weight * desired 
         M[M>1]=1
-    #gc.collect()
     return M
 
 def entropy_m(X):
+    '''Return matrix of the entropies of 
+    bernoulli random variables in X 
+
+    Args:
+
+    X -- matrix of entries in [0,1]'''
     n = X.shape[0]
     H = np.zeros(X.shape)
     for i in range(n):
@@ -635,11 +832,27 @@ def entropy_m(X):
     return H
 
 def entropy_m_sum(X):
+    '''Return sum of the entropies of the bernoulli random variables in X 
+
+    Args:
+
+    X -- matrix of entries in [0,1]'''
+
     H = entropy_m(X)
     return H.sum()
 
 
 def auc_p(X,A,valid):
+    '''Return roc_auc_score and ap scores for how well 
+    X predicts A for pairs in valid 
+
+    Args:
+
+    X -- prediction score matrix
+    A -- true score matrix 
+    valid -- list of pairs 
+
+    '''
     trueScores = []
     predScores = []
     for [u,v] in valid:
@@ -653,6 +866,21 @@ def auc_p(X,A,valid):
 #########################################
 
 def second_order_walk(edges, node_ixs, rwlen, p=1, q=1, n_walks=1):
+
+    '''Array of n_walks
+    random walks of length rwlen using node2vec walk
+
+    Args:
+
+    edges -- list of pairs partitioned by each node.
+    node_ixs -- list of start index of the pairs in edges 
+    belonging to each node 
+    rwlen -- int, number of  nodes on walk
+    p,q -- node2vec paramaters
+    n_walks -- number of walks 
+     '''
+
+
     N=len(node_ixs)
     
     walk = []
@@ -754,6 +982,46 @@ class RandomWalker:
         while True:
             self.current_node = gen_single_node(self.N,self.RW,self.s,self.current_node)
             yield self.current_node
+
+
+'''Benchmark generators'''
+
+def fitSBM(A,num_clusters):
+    ''' Return probabilistic adjacency matrix for SBM on graph
+    G defined by A with num_clusters
+
+    Args:
+
+    A -- adjacency matrix 
+    num_clusters -- int '''
+    G = nx.from_numpy_matrix(A)
+    #fit the model 
+    clustering = SpectralClustering(n_clusters=num_clusters,affinity='precomputed').fit(A)
+    n = len(clustering.labels_) #ith entry of clustering.labels_ is cluster of node i
+    total = range(n)
+    clusters = [[] for x in range(num_clusters)]
+    S = np.zeros((n,n))
+    for i in total:
+        clusters[clustering.labels_[i]].append(i) #append i to the list coresponding to its cluster
+    intra_cluster = np.zeros((num_clusters,num_clusters))
+    inter_cluster = np.zeros((num_clusters))
+    for i in range(num_clusters): #compute densities
+        Y = A[np.ix_(clusters[i],clusters[i])] 
+        size = float(len(clusters[i]))
+        inter_cluster[i] = float(Y.sum())/(size*(size-1))
+        for j in range(i+1,num_clusters):
+            Y = A[np.ix_(clusters[i],clusters[j])]
+            density = float(Y.sum())/(size*len(clusters[j]))
+            intra_cluster[i,j] = density
+            intra_cluster[j,i]= density
+    for i in range(n):
+        for j in range(i+1,n):
+            if clustering.labels_[i]==clustering.labels_[j]:
+                S[i,j] = inter_cluster[clustering.labels_[i]]
+            else:
+                S[i,j] = intra_cluster[clustering.labels_[i],clustering.labels_[j]]
+    return S+S.T
+
 
 
 ##########################
@@ -1442,48 +1710,3 @@ def compute_graph_statistics(A_in, Z_obs=None):
     statistics['cpl'] = statistics_compute_cpl(A)
 
     return statistics
-
-
-'''Benchmark generators'''
-
-def fitSBM(X,num_clusters):
-    G = nx.from_numpy_matrix(X)
-    #fit the model 
-    clustering = SpectralClustering(n_clusters=num_clusters,affinity='precomputed').fit(X)
-    intra_cluster = np.zeros((num_clusters,num_clusters))
-    inter_cluster = np.zeros((num_clusters))
-    n = len(clustering.labels_)
-    total = range(n)
-    clusters = [[] for x in range(num_clusters)]
-    S = np.zeros((n,n))
-    for i in total:
-        #append i to the list corespondin to it's cluster
-        clusters[clustering.labels_[i]].append(i) 
-    for i in range(num_clusters):
-        #compute inter_cluster density
-        Y = X[np.ix_(clusters[i],clusters[i])]
-        size = len(clusters[i])
-        inter_cluster[i] = Y.sum()/(size*(size-1))
-        for j in range(i+1,num_clusters):
-            Y = X[np.ix_(clusters[i],clusters[j])]
-            density = Y.sum()/(size*len(clusters[j]))
-            intra_cluster[i,j] = density
-            intra_cluster[j,i]= density
-    for i in range(n):
-        for j in range(i+1,n):
-            if clustering.labels_[i]==clustering.labels_[j]:
-                S[i,j] = inter_cluster[clustering.labels_[i]]
-            else:
-                S[i,j] = intra_cluster[clustering.labels_[i],clustering.labels_[j]]
-    return S
-
-
-
-
-
-
-
-
-
-
-
