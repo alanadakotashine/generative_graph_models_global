@@ -216,16 +216,18 @@ def test_correct_balance_batch():
 	A[5,1]=1
 	cuts = [set([0,1,2,3])]
 	for single in [True, False]:
-		for unif_update in [True, False]:
+		for unif_update in [False, True]:
 			print('single {} unif update {}'.format(single, unif_update))
-			A, high = correct_cut_set(A,A_star,cuts,single,unif_update)
-			print(gen_connectivity_across_cuts(A,cuts))
+			A_new, high = correct_cut_set(A,A_star,cuts,single,unif_update)
+			print(gen_connectivity_across_cuts(A_new,cuts))
 			print(gen_connectivity_across_cuts(A_star,cuts))
+			print(A_new)
+	print(hi)
 	cuts = [set([0,1,2,3]),set([0,1,6,7])]
 	for single in [True,False]:
-		for unif_update in [True,False]:
+		for unif_update in [False,True]:
 			print('single {} unif update {}'.format(single, unif_update))
-			A, high = correct_cut_set(A,A_star,cuts,single,unif_update)
+			A_new, high = correct_cut_set(A,A_star,cuts,single,unif_update)
 			print(gen_connectivity_across_cuts(A,cuts))
 			print(gen_connectivity_across_cuts(A_star,cuts))
 
@@ -258,7 +260,7 @@ def test_opt_assignment():
 	y_star = np.array(gen_assignment(A_star,node_part_label_vertices_map,variables))
 	y_prime = np.array(gen_assignment(A,node_part_label_vertices_map,variables))
 	#optimize for new assignment
-	y = gen_opt_assignment(len(cuts), y_star, y_prime, capacities, single)
+	y, heavy = gen_opt_assignment(len(cuts), y_star, y_prime, capacities, single, variables)
 	print(y_star)
 	print(y_prime)
 	print(y)
@@ -335,7 +337,11 @@ def test_grasp():
 	print(A_truth.sum())
 	print(A.sum())
 	out_graph = I
+	print(out_graph)
 	out_graph, in_graph, out_neighbors, in_neighbors = sample_neighborhood_subset(n, new_neighborhood_size,I,out_graph,[np.arange(n)]*n,cur_neighborhood_size)
+	print(out_graph)
+	print(out_neighbors)
+	print(hi)
 	for i in range(10):
 		c, c_comp = grasp(I,out_graph,init_size,num_grasp_iters,vertex_conn,cut_conn,np.abs,out_neighbors,in_graph,in_neighbors,new_neighborhood_size)
 		print('value')
@@ -377,7 +383,8 @@ def test_gen_cuts():
 	A[7,1]=-1
 	A[1,8]=-1
 	A[8,1]=-1
-	c, c_comp = gen_cuts(config, 1, A_truth - A)
+	c, c_comp = gen_cuts(config, 1, A-A_truth)
+	print('here')
 	print(c)
 	print(c_comp)
 	print('value')
@@ -1204,8 +1211,6 @@ def update_conn_list(conn_list, incoming, v, S, incoming_neighbors, inc=True, de
 def greedy_place(A,out_graph,s,f,g,out_neighbors,in_graph,in_neighbors,n,neighborhood_size,sub_neighborhood_size):
 	'''Randomly place s nodes into S,S_comp disjoint sets'''
 	(S,S_comp) = random_place(n,s)
-	print(S)
-	print(S_comp)
 	#conn_list constists of two lists of length n
 	#where the vth entry maps f(v,S(N(v))) where  S(N(v)) are the elements of 
 	#of S that intersect N(v) which is the set of the neighbors of v
@@ -1221,7 +1226,6 @@ def greedy_place(A,out_graph,s,f,g,out_neighbors,in_graph,in_neighbors,n,neighbo
 			bitS_comp[v]=1
 		else:
 			conn_v = conn_list[:,v]
-			print(conn_v)
 			#if g(f(v,S)) is high, place on other side
 			#to have high value of g(f(-)) across cut
 			if g(conn_v[0])>=g(conn_v[1]):
@@ -1230,7 +1234,6 @@ def greedy_place(A,out_graph,s,f,g,out_neighbors,in_graph,in_neighbors,n,neighbo
 			else:
 				S.add(v) 
 				bitS[v]=1
-			print(S)
 			#adding v for the first time, connectivity to either S,S_comp
 			#is only increased for node neighbors so no need to decrement
 			increment_update = True

@@ -103,10 +103,10 @@ def CUT_CORRECT_DATA_CONSOLIDATION_HEAD(path, header, cut_method, key, freq_gen,
 	return path+header+'_num_cuts_'+cut_method+'_'+key+'_'+freq_gen+'_{}'.format(num_iter)
 
 def cut_correct_set_up(total_time, non_walk_gen, walk_algs, num_walk_alg_iters, cut_correct_methods, params, A_truth, i, name, path):
-	num_walk_alg_iters_all = {}
+	num_walk_alg_iters_all = {} #map frequency generator to all walk algorithm iterations (including non walk algorithms to zero)
 	#For the frequency matrices without walks, only key is zero for zero walk alg iterations
 	frequencies_non_walk = cut_walk_gen_utils.gen_freq_non_walk(A_truth, non_walk_gen)
-	for cut_method in cut_correct_methods:
+	for cut_method in cut_correct_methods: #For each cut method, write the frequency matrices for input so they can be loaded
 		for freq_gen in non_walk_gen:
 			np.savetxt(CUT_CORRECT_W_WALK_ALG_SM(path, params['header'][0], i, cut_method, freq_gen, 0, 0),frequencies_non_walk[freq_gen][0])
 			num_walk_alg_iters_all[freq_gen] = [0]
@@ -127,7 +127,13 @@ def cut_correct_set_up(total_time, non_walk_gen, walk_algs, num_walk_alg_iters, 
 	return num_walk_alg_iters_all, all_gens, total_time
 
 def walk_alg_w_cut_correct(path,A_truth, stats, params,i, num_walk_alg_iters = None):
-	'''Walk algorithms'''
+	'''Walk algorithms
+
+	path -- write the new probabilistic adjacency matirces generated.
+
+
+
+	'''
 	frequencies = {}
 	walk_algs = params['walk_algs']
 	non_walk_gen = params['non_walk_gen']
@@ -145,7 +151,6 @@ def walk_alg_w_cut_correct(path,A_truth, stats, params,i, num_walk_alg_iters = N
 	if params['run_walk_algs'][0]==1:
 		freq_paths, data_paths = WALK_GEN_FREQ_PATHS_SINGLE_RUN(path+params['header_short'][0], walk_algs, i)
 		time_walks = rw_gen.rw_gen(A_truth,walk_algs,num_walk_alg_iters,freq_paths, data_paths)
-		print(time_walks)
 		#record time for every cut_method
 		for alg in walk_algs:	
 			for num_iter in num_walk_alg_iters[alg]:
@@ -187,7 +192,7 @@ def walk_alg_w_cut_correct(path,A_truth, stats, params,i, num_walk_alg_iters = N
 				'''Returns map of result from name of statistic to a map'''
 				'''Each statistic map is a map from the number of cuts corrected to that
 				statistic on the frequency matrix'''
-				result_keys, results, time_to_correct_new = cut_gen.cut_correct_gen(sm_file_head,num_cut_stops,cut_method,A_truth,input_to_correct,stats['cut'],cut_correct_batch_size,grasp_neighborhood_size,start_target)
+				result_keys, results, time_to_correct_new = cut_gen.cut_correct_gen(sm_file_head,num_cut_stops,cut_method,A_truth,input_to_correct,stats['cut'],grasp_neighborhood_size,cut_correct_batch_size,start_target)
 				'''Append the time it took to correct the new cuts'''
 				time_to_correct[freq_gen+str(num_iter)] = time_to_correct_ + time_to_correct_new
 				'''Add total time it took to correct the new cuts'''
@@ -224,7 +229,6 @@ def consolidate_data_across_runs(name,path,stats,params, check_point_header,prop
 	for gen in non_walk_gen:
 		num_walk_alg_iters[gen]=[0]
 	for cut_method in cut_methods:
-		print(all_freq_gens)
 		for freq_gen in all_freq_gens:
 			for num_iter in num_walk_alg_iters[str(freq_gen)]:
 				specs_initial = []
@@ -273,6 +277,16 @@ def consolidate_data_across_runs(name,path,stats,params, check_point_header,prop
 							np.savetxt(directory+txt_head,data_total[stat])
 					
 def main(path, params_path, stats_path, num_walk_alg_iters_path, combine):
+	'''
+	path -- 
+	params_path -- path with dictionary of paramaters 
+	stas_path -- path with dictionary of statistics to run on probabilisitc
+		adjacency matrices 
+	num_walk_alg_iters_path -- number of walk algorithm iterations for random walk 
+		algorithms 
+	combine -- flag. True if taking average over past runs, False if executing
+		new run.
+	'''
 	with open(params_path,'r') as fp:
 		params = json.load(fp)
 	with open(stats_path,'r') as fp:
@@ -280,10 +294,9 @@ def main(path, params_path, stats_path, num_walk_alg_iters_path, combine):
 	with open(num_walk_alg_iters_path,'r') as fp:
 		num_walk_alg_iters = json.load(fp)
 	model_stats = ['entropies','l2_lin_freq']
-	if combine == 0:
+	if combine == 0: #generate model using walks/cut correct 
 		A_truth = np.loadtxt(DATA_FILE(name))
-		np.fill_diagonal(A_truth,0)
-		#generate model using walks/cut correct 
+		np.fill_diagonal(A_truth,0) #remove self loops
 		freq_mat_nums_compute = params['freq_mat_nums_compute']
 		for i in freq_mat_nums_compute:
 			walk_alg_w_cut_correct(path,A_truth, stats, params,i,num_walk_alg_iters)
@@ -334,14 +347,16 @@ def main(path, params_path, stats_path, num_walk_alg_iters_path, combine):
 						shutil.copy(src_total, dst_total)
 
 if __name__ == "__main__":
+	#cut_gen.test_gen_cuts()
+	#rw_gen.gen_votes_cluster()
+	#cut_gen.test_correct_balance_batch()
+	#cut_gen.test_opt_assignment()
+	#rw_gen.gen_votes_cluster()
+	#cut_gen.test_gen_cuts()
 	name = sys.argv[1]
 	path = sys.argv[2]
 	stats_path = sys.argv[3]
 	params_path = sys.argv[4]
 	num_walk_alg_iters = sys.argv[5]
 	combine = int(sys.argv[6])
-	#cut_gen.test_correct_balance_batch()
-	#cut_gen.test_opt_assignment()
 	main(path, params_path,stats_path, num_walk_alg_iters,combine)	
-	#rw_gen.gen_votes_cluster()
-	#cut_gen.test_gen_cuts()
