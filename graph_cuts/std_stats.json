@@ -1,0 +1,1 @@
+{"freq": ["spectrum", "entropy"], "disc": ["spectrum", "size_lcc", "betweenness", "shortestpath", "cc", "assort"], "cut": ["heavy", "diff", "abs_diff", "cond_truth"]}

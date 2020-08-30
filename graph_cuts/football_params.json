@@ -1,0 +1,13 @@
+{"walk_algs": ["bs_10+zc+wdw"], 
+"non_walk_gen": ["unif"], 
+"freq_mat_nums_compute": [1], 
+"cut_correct_methods": ["grasp_abs_independent_triple_pushup","grasp_abs_independent_single_pushup"],
+"grasp_neighborhood_size": [0.5], 
+"cut_correct_batch_size": [1], 
+"cut_correct_fix_from_walks": [0], 
+"comp_models": [], 
+"num_cut_stops": [5,10,15,20,25,30,35,40,45,50], 
+"header": ["football_num_cut_correct_batch_1_from_walk_0_grasp_neighborhood_0.5"], 
+"header_short": ["football"], 
+"start_target":[0], 
+"run_walk_algs":[1]}
