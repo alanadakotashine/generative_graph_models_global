@@ -562,15 +562,14 @@ def gen_freq_from_walks(A,walker1,walker2,num_iters,walk_params,data_path=None,f
 	truth_spec = utils.spectrum(A)
 	F = np.zeros((A.shape[0],A.shape[0])) #Initialize frequency matrix
 	stats = defaultdict(list)
-	num_batches = [int(x/walk_params['bs']) for x in num_iters] #number of rounds is number of iterations divided by batch size
-	max_batches = max(num_batches) 
-	for i in range(max_batches):
+	num_rounds = [int(x/walk_params['bs']) for x in num_iters] #number of rounds is number of iterations divided by batch size
+	max_rounds = max(num_rounds) 
+	for i in range(max_rounds):
 		(S,S_comp,walks) = gen_cut_from_walks(A,walker1,walker2,walk_params)
 		assert(len(S.intersection(S_comp)) == 0)
 		F, stats = matrix_update(A, S, S_comp, walk_params, F, num_iters, walks, stats, i, truth_spec)
 		if ((i+1)*walk_params['bs']) in num_iters: #record time
 			if freq_path != None:
-				print('SAVING HERE')
 				sF = utils.normMatrix_wsum(F,A.sum())
 				np.savetxt(freq_path+'num_iters{}.txt'.format((i+1)*walk_params['bs']),sF)
 			times[(i+1)*walk_params['bs']] = time.time()-start

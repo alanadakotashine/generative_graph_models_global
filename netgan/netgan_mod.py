@@ -21,7 +21,6 @@ import time
 import numpy as np
 from sklearn.metrics import roc_auc_score, average_precision_score
 import os
-from matplotlib import pyplot as plt
 import copy
 
 

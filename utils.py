@@ -3,7 +3,6 @@ import scipy.sparse as sp
 import numpy as np
 from scipy.sparse.csgraph import connected_components, minimum_spanning_tree
 import warnings
-from matplotlib import pyplot as plt
 import numpy.linalg as linalg
 from scipy.linalg import norm as norm_sp
 import time
@@ -701,7 +700,6 @@ def secondOrderRandWalkMatrix(edges, node_ixs, p = 1, q = 1):
 
 def solveStationary( A ):
     """ x = xA where x is the answer
-    x - xA = 0
     x( I - A ) = 0 and sum(x) = 1
     """
     n = A.shape[0]

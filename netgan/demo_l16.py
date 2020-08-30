@@ -91,7 +91,7 @@ if __name__ == "__main__":
     num_units_gen = int(num_units_gen)
     num_units_disc = int(num_units_disc)
     
-    A = np.loadtxt('../data/'+name+'.txt')
+    A = np.loadtxt('data/'+name+'.txt')
 
     G = nx.from_numpy_matrix(A)
 
