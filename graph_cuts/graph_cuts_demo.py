@@ -347,10 +347,6 @@ def main(path, params_path, stats_path, num_walk_alg_iters_path, combine):
 						shutil.copy(src_total, dst_total)
 
 if __name__ == "__main__":
-	#cut_gen.test_gen_cuts()
-	#cut_gen.test_correct_balance_batch()
-	#cut_gen.test_opt_assignment()
-	#cut_gen.test_gen_cuts()
 	name = sys.argv[1]
 	path = sys.argv[2]
 	stats_path = sys.argv[3]
