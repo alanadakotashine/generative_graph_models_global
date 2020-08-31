@@ -563,6 +563,7 @@ def gen_freq_from_walks(A,walker1,walker2,num_iters,walk_params,data_path=None,f
 	freq_path - paths for writing probabilistc adjacency matrices 
 
 	'''
+	start = time.time()
 	times = {}
 	truth_spec = utils.spectrum(A)
 	F = np.zeros((A.shape[0],A.shape[0])) #Initialize frequency matrix
