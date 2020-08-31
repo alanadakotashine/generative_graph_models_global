@@ -474,7 +474,6 @@ def update_F(walks,F,walk_dist_weight,cut_disc,S,S_comp):
 	weights = np.array([]) #entries of updates
 	x = np.array([]) #coordinates of updates
 	y = np.array([]) #coordinates of updates
-	start = time.time()
 	max_dist = 20 #cap for number of steps between nodes for which to add weight
 	for walk in walks:
 		if cut_disc: #cap is at most number of steps between first node and last node in cut
@@ -564,7 +563,6 @@ def gen_freq_from_walks(A,walker1,walker2,num_iters,walk_params,data_path=None,f
 	freq_path - paths for writing probabilistc adjacency matrices 
 
 	'''
-	start = time.time()
 	times = {}
 	truth_spec = utils.spectrum(A)
 	F = np.zeros((A.shape[0],A.shape[0])) #Initialize frequency matrix
