@@ -348,10 +348,8 @@ def main(path, params_path, stats_path, num_walk_alg_iters_path, combine):
 
 if __name__ == "__main__":
 	#cut_gen.test_gen_cuts()
-	#rw_gen.gen_votes_cluster()
 	#cut_gen.test_correct_balance_batch()
 	#cut_gen.test_opt_assignment()
-	#rw_gen.gen_votes_cluster()
 	#cut_gen.test_gen_cuts()
 	name = sys.argv[1]
 	path = sys.argv[2]

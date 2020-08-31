@@ -28,10 +28,18 @@ import cut_walk_gen_utils
 def gen_indep_walks_barbell():
 	G = nx.barbell_graph(50,0)
 	A = nx.adjacency_matrix(G).todense()
+	for i in range(11,21):
+		for j in range(80,90):
+			A[i,j] = 1
+			A[j,i] = 1
 	walker1, walker2 = gen_walkers(A)
 	walker1.set_current([5])
 	walker2.set_current([55])
 	(w1,w2,S,S_comp) = gen_indep_walks(walker1, walker2)
+	print(w1)
+	print(w2)
+	print(S)
+	print(S_comp)
 
 
 def gen_votes_cluster():
@@ -52,8 +60,6 @@ def gen_votes_cluster():
 	print(votes[30])
 	print(votes[60])
 	print(votes[90])
-	for walkset in walks:
-		print(len(walkset))
 	for u in [10,30,60,90]:
 		if ((votes[u][0]+votes[u][1]) == 0):
 			print('{} is seed node'.format(u))
@@ -66,7 +72,7 @@ def matrix_update_barbell():
 	S_comp = set([5,6,7,8,9])
 	batch_size = 1
 	F = np.zeros((10,10))
-	params = {'bs':1,'walk_dist_weight':True,'zero_cross':False}
+	params = {'bs':1,'walk_dist_weight':True,'zero_cross':True}
 	num_iters = [5]
 	walks = [[[2,4,5],[8,7,6],[3,1,2,3,4,5,6]]]
 	stats = defaultdict(list)
@@ -74,6 +80,7 @@ def matrix_update_barbell():
 	truth_spec = utils.spectrum(A)
 	batch_num = 0
 	F, stats  = matrix_update(A, S, S_comp, params, F, num_iters, walks, stats, batch_num, truth_spec)
+	print(F)
 
 
 
