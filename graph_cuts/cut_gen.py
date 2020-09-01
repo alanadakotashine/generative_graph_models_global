@@ -873,7 +873,7 @@ def connectivity(A,S,u):
 	conn_edges = A[np.ix_(S,[u])]
 	return conn_edges.sum()
 
-def comp_incoming_neighbors(outgoing,n,A):
+def comp_incoming_neighbors(outgoing,n,W):
 	'''Computes a list of incoming neighbors and the connectivity to them for each node 
 
 	Returns:
@@ -886,7 +886,7 @@ def comp_incoming_neighbors(outgoing,n,A):
 		outgoing - list of outgoing neighbor lists.
 			vth list is list of outgoing neighbors of v
 		n - number of nodes 
-		A - probabilistic adjacency matrix 
+		W - weight matrix 
 	'''
 
 	incoming_neighbors = []
@@ -898,10 +898,11 @@ def comp_incoming_neighbors(outgoing,n,A):
 		neighbors = outgoing[i] #For each edge from i to j, add i to j's incoming neighbors
 		for j in neighbors:
 			incoming_neighbors[j].append(i)
-			incoming_neighbors_conn[j].append(A[i,j])
+			incoming_neighbors_conn[j].append(W[i,j])
 	return incoming_neighbors, incoming_neighbors_conn
 
-def sample_neighborhood_subset_helper(A,A_sub,new_num_neighbors,cur_num_neighbors,cur_neighbors,n):
+
+def sample_neighborhood_subset_helper(W,cur_out_graph,new_num_neighbors,cur_num_neighbors,cur_neighbors,n):
 	'''Sample new_num_neighbors from cur_neighhbors of for each node
 
 	Returns:
@@ -911,8 +912,8 @@ def sample_neighborhood_subset_helper(A,A_sub,new_num_neighbors,cur_num_neighbor
 			vth row is list of connectivity of v to its new neighbors 
 
 	Args:
-		A - probabilistic adjacency matrix 
-		A_sub - matrix of dimension n by cur_num_neighbors
+		W - probabilistic adjacency matrix 
+		cur_out_graph - matrix of dimension n by cur_num_neighbors
 			vth row is connectiivty of v to its current neighbors
 		new_num_neighbors, cur_num_neighbors - Integers. If 
 			new_num_neighbors is greater than cur_num_neighbors,
@@ -921,12 +922,12 @@ def sample_neighborhood_subset_helper(A,A_sub,new_num_neighbors,cur_num_neighbor
 			vth row is list of connectivity of v to its current neighbors 
 		n - number of nodes 
 	'''
-	assert(A_sub.shape[1] == cur_num_neighbors)
+	assert(cur_out_graph.shape[1] == cur_num_neighbors)
 	if new_num_neighbors >= cur_num_neighbors: #Can't subsample
-		return cur_neighbors, A_sub
+		return cur_neighbors, cur_out_graph
 	else:
-		min_entry = max(np.min(np.abs(A_sub)),.0000000001) #add noise in case connectivity of node is zero
-		abs_A_noise = np.abs(A_sub) + (min_entry/100.0)
+		min_entry = max(np.min(np.abs(cur_out_graph)),.0000000001) #add noise in case connectivity of node is zero
+		abs_A_noise = np.abs(cur_out_graph) + (min_entry/100.0) #use absolute value of connectivity
 		Z = np.sum(abs_A_noise,axis=1).astype(float)
 		P = abs_A_noise/Z[:,None]
 		neighbors = np.zeros((n,new_num_neighbors)).astype(int)
@@ -934,13 +935,14 @@ def sample_neighborhood_subset_helper(A,A_sub,new_num_neighbors,cur_num_neighbor
 		for i in range(n):
 			sub_sample = np.random.choice(cur_num_neighbors,new_num_neighbors,p=P[i],replace=False).astype(int)
 			neighbors[i] = cur_neighbors[i][sub_sample]
-			outgoing[i] = A[i][neighbors[i]]
+			outgoing[i] = W[i][neighbors[i]]
 	return neighbors, outgoing
 
-def sample_neighborhood_subset(n, sub_neighborhood_size, A, out_graph, out_neighbors, neighborhood_size):
+
+def sample_neighborhood_subset(n, sub_neighborhood_size, W, out_graph, out_neighbors, neighborhood_size):
 	'''Sample sub_neighborhood_size outgoing neighbors from 
 	each node's current neighborhood_size outgoing neighbors 
-	with the probability of each neighbor proportional to its connectivity in A 
+	with the probability of each neighbor proportional to its connectivity in W
 
 	Returns:
 		out_graph - vth row is connectivity of v to its outgoing neighbors 
@@ -951,24 +953,24 @@ def sample_neighborhood_subset(n, sub_neighborhood_size, A, out_graph, out_neigh
 	Args:
 		n - Integer, number of nodes 
 		sub_neighborhood_size - Integer, new number of neighbors 
-		A - probabilistic adjacency matrix 
+		W - weight matrix 
 		out_graph - vth row is connectivity of v to its current outgoing neighbors 
 		out_neighbors - vth row is list of current outgoing neighbors of v 
 		neighborhood_size - Integer, current number of neighbors
 	'''
-	assert(A.shape[0] == n)
-	assert(A.shape[1] == n)
+	assert(W.shape[0] == n)
+	assert(W.shape[1] == n)
 	assert(out_graph.shape[1]==neighborhood_size)
 	assert(sub_neighborhood_size <= neighborhood_size)
-	out_neighbors, out_graph = sample_neighborhood_subset_helper(A,out_graph,sub_neighborhood_size,neighborhood_size,out_neighbors,n)
+	out_neighbors, out_graph = sample_neighborhood_subset_helper(W,out_graph,sub_neighborhood_size,neighborhood_size,out_neighbors,n)
 	assert(out_graph.shape[1] == sub_neighborhood_size)
-	'''Incoming neighbors of v are all of the nodes that contain v as a neighbor'''
-	'''in_graph[u][v] is the connectivity of u to it's vth incoming neighbor '''
-	in_neighbors, in_graph = comp_incoming_neighbors(out_neighbors,n,A)
+	#in_neighbors of v are all of the nodes that contain v as a neighbor
+	#in_graph[u][v] is the connectivity of u to it's vth incoming neighbor 
+	in_neighbors, in_graph = comp_incoming_neighbors(out_neighbors,n,W)
 	return out_graph, in_graph, out_neighbors, in_neighbors
 
 
-def conn_list_init_help(A,outgoing_neighbors,S,S_comp, n, conn_list):
+def conn_list_init_help(W,outgoing_neighbors,S,S_comp, n, conn_list):
 	'''For each node i, compute its connectiivty to S,S_comp using only its
 	outgoing neighbors
 
@@ -977,7 +979,7 @@ def conn_list_init_help(A,outgoing_neighbors,S,S_comp, n, conn_list):
 			vth entry is connectivity of v to S and S_comp
 
 	Args:
-		A - probabilistic adjacency matrix 
+		W - weight matrix 
 		outgoing_neighbors - vth list is list of outgoing neighbors of v 
 		S, S_comp - bipartition of nodes 
 		n - number of nodes 
@@ -989,9 +991,9 @@ def conn_list_init_help(A,outgoing_neighbors,S,S_comp, n, conn_list):
 		num_neighbors = len(neighbors_i)
 		for j in range(num_neighbors):
 			if neighbors_i[j] in S:
-				conn_list[0][i] += A[i,j]
+				conn_list[0][i] += W[i,j]
 			elif neighbors_i[j] in S_comp:
-				conn_list[1][i] += A[i,j]
+				conn_list[1][i] += W[i,j]
 	return conn_list
 
 def conn_list_init(S,S_comp,n,W,out_graph,out_neighbors,in_graph, in_neighbors, neighborhood_size,sub_neighborhood_size):
