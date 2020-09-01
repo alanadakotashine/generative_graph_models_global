@@ -5,7 +5,7 @@ To run netgan:
 mkdir results 
 python netgan/demo_l16.py 3 walk 1 results 64 40 30 model_best football
 
-To run cut fix generation with random walk generation as input:
+To run cut fix generation with matrix from random walk generation as the seed matrix:
 mkdir results
 cd graph_cuts
 python3 graph_cuts_demo.py football ../results/ std_stats.json football_params.json num_walk_algs.json 0
