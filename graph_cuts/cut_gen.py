@@ -994,7 +994,7 @@ def conn_list_init_help(A,outgoing_neighbors,S,S_comp, n, conn_list):
 				conn_list[1][i] += A[i,j]
 	return conn_list
 
-def conn_list_init(S,S_comp,n,A,out_graph,out_neighbors,in_graph, in_neighbors, neighborhood_size,sub_neighborhood_size):
+def conn_list_init(S,S_comp,n,W,out_graph,out_neighbors,in_graph, in_neighbors, neighborhood_size,sub_neighborhood_size):
 	'''Sub sample neighborhoods and compute connectivity lists to S and S_comp
 
 	Returns:
@@ -1025,7 +1025,7 @@ def conn_list_init(S,S_comp,n,A,out_graph,out_neighbors,in_graph, in_neighbors, 
 			conn_list = conn_list_init_help(out_graph,out_neighbors,S,S_comp, n, conn_list)
 		return conn_list, in_neighbors, out_neighbors, in_graph, out_graph
 	#Else, sample sub_neighborhood_size neighbors from neighbors for each node
-	out_graph, in_graph, out_neighbors, in_neighbors = sample_neighborhood_subset(n, sub_neighborhood_size,A,out_graph,out_neighbors,neighborhood_size)
+	out_graph, in_graph, out_neighbors, in_neighbors = sample_neighborhood_subset(n, sub_neighborhood_size,W,out_graph,out_neighbors,neighborhood_size)
 	conn_list = conn_list_init_help(out_graph,out_neighbors,S,S_comp, n, conn_list)
 	return conn_list, in_neighbors, out_neighbors, in_graph, out_graph
 
