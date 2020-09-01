@@ -341,7 +341,6 @@ def test_grasp():
 	out_graph, in_graph, out_neighbors, in_neighbors = sample_neighborhood_subset(n, new_neighborhood_size,I,out_graph,[np.arange(n)]*n,cur_neighborhood_size)
 	print(out_graph)
 	print(out_neighbors)
-	print(hi)
 	for i in range(10):
 		c, c_comp = grasp(I,out_graph,init_size,num_grasp_iters,vertex_conn,cut_conn,np.abs,out_neighbors,in_graph,in_neighbors,new_neighborhood_size)
 		print('value')
@@ -349,7 +348,6 @@ def test_grasp():
 		print(np.abs(cut_conn(I,c,c_comp)))
 		print('cut')
 		print(c)
-		print(hi)
 	I = A-A_truth
 	out_graph = I
 	out_graph, in_graph, out_neighbors, in_neighbors = sample_neighborhood_subset(n, new_neighborhood_size,I,out_graph,[np.arange(n)]*n,cur_neighborhood_size)
@@ -1010,7 +1008,7 @@ def conn_list_init(S,S_comp,n,A,out_graph,out_neighbors,in_graph, in_neighbors, 
 	Args:
 		S, S_comp - biparttion of vertices
 		n - number of vertices
-		A - probabilistic graph 
+		W - weighted graph 
 		out_graph - vth list is connectivity of v to its out neighbors 
 		out_neighbors - vth list is list of out neighbors of v 
 		in_graph - vth list is connecitivyt of v to its incoming neighbors 
@@ -1021,12 +1019,12 @@ def conn_list_init(S,S_comp,n,A,out_graph,out_neighbors,in_graph, in_neighbors, 
 	conn_list = np.zeros((2,n))
 	if sub_neighborhood_size >= neighborhood_size: #Can not subsample
 		if sub_neighborhood_size == n: #Compute connectivity list with entire graph
-			conn_list[0] = A[list(S),:].sum(axis=0)
-			conn_list[1] = A[list(S_comp),:].sum(axis=0)
+			conn_list[0] = W[list(S),:].sum(axis=0)
+			conn_list[1] = W[list(S_comp),:].sum(axis=0)
 		else: #Compute connectivity list 
 			conn_list = conn_list_init_help(out_graph,out_neighbors,S,S_comp, n, conn_list)
 		return conn_list, in_neighbors, out_neighbors, in_graph, out_graph
-	'''Else, sample sub_neighborhood_size neighbors from neighbors for each node'''
+	#Else, sample sub_neighborhood_size neighbors from neighbors for each node
 	out_graph, in_graph, out_neighbors, in_neighbors = sample_neighborhood_subset(n, sub_neighborhood_size,A,out_graph,out_neighbors,neighborhood_size)
 	conn_list = conn_list_init_help(out_graph,out_neighbors,S,S_comp, n, conn_list)
 	return conn_list, in_neighbors, out_neighbors, in_graph, out_graph
@@ -1208,26 +1206,51 @@ def update_conn_list(conn_list, incoming, v, S, incoming_neighbors, inc=True, de
 		decIndex = 0
 	return assignment_conn_list(inc,dec,incIndex,decIndex,conn_list,incoming,v, incoming_neighbors)
 
-def greedy_place(A,out_graph,s,f,g,out_neighbors,in_graph,in_neighbors,n,neighborhood_size,sub_neighborhood_size):
-	'''Randomly place s nodes into S,S_comp disjoint sets'''
-	(S,S_comp) = random_place(n,s)
-	#conn_list constists of two lists of length n
-	#where the vth entry maps f(v,S(N(v))) where  S(N(v)) are the elements of 
-	#of S that intersect N(v) which is the set of the neighbors of v
-	conn_list, in_neighbors, out_neighbors, in_graph, out_graph = conn_list_init(S,S_comp,n,A,out_graph,out_neighbors,in_graph,in_neighbors,neighborhood_size,sub_neighborhood_size)
-	'''Greedily place v with S/S_comp that maximizes g'''
+def greedy_place(W,out_graph,s,f,g,out_neighbors,in_graph,in_neighbors,n,neighborhood_size,sub_neighborhood_size):
+	'''Generate approximate maximizer solution to g composed with f_global over all cuts
+		in sub-graph of out_graph with sub_neighborhood_size out neighbors for each node 
+
+	Return (S,S_comp,conn_list,bitS,bitS_comp,in_neighbors,in_graph,out_neighbors,out_graph)
+		S, S_comp - greedy bipartition of nodes 
+		conn_list - two lists of size n where vth entries of lists are connectivity of
+			node v to S and S_comp in out_graph 
+		bitS, bitS_comp - bit vectors indicating membership of nodes to S and S_comp 
+		in_neighbors - list of lists with the vth list containing the incoming neighbors of v 
+		in_graph - list of lists with the vth list containing the connectivity of v to its
+			incoming neighbors  
+		out_neighbors - list of lists with vth list containing the outgoing neighbors of v
+			(each list is length sub_neighborhood_size) 
+		out_graph - directed sub-graph of bi-directed graph defined by W 
+
+	Args:
+		W - weight matrix 
+		out_graph - directed sub-graph of bi-directed graph defined by W 
+		s - nodes to intialize greedy placement 
+		f - local objective, used in local search
+		g - function objectives (local and global) are composed with 
+		out_neighbors - list of lists with vth list containing the outgoing neighbors of v 
+		in_graph - list of lists with the vth list containing the connectivity of v to its
+			incoming neighbors 
+		in_neighbors - list of lists with the vth list containing the incoming neighbors of v 
+		n - number of nodes 
+		neighborhood_size - current number of outgoing neighbors for each node 
+		sub_neighborhood_size - new number of outgoing neighbors for each node 
+			(for subsampling the current out_graph, 
+			could be smaller then current number of outgoing neighbors)
+	'''
+
+	(S,S_comp) = random_place(n,s) #Randomly place s nodes into S,S_comp disjoint sets
+	conn_list, in_neighbors, out_neighbors, in_graph, out_graph = conn_list_init(S,S_comp,n,W,out_graph,out_neighbors,in_graph,in_neighbors,neighborhood_size,sub_neighborhood_size)
 	rand_order = np.random.permutation(n)
 	bitS = np.zeros(n)
 	bitS_comp = np.zeros(n)
-	for v in rand_order:
+	for v in rand_order: #Greedily place v with Q = S or Q = S_comp that maximizes g(f(v,Q))
 		if v in S:
 			bitS[v]=1
 		elif v in S_comp:
 			bitS_comp[v]=1
 		else:
 			conn_v = conn_list[:,v]
-			#if g(f(v,S)) is high, place on other side
-			#to have high value of g(f(-)) across cut
 			if g(conn_v[0])>=g(conn_v[1]):
 				S_comp.add(v)
 				bitS_comp[v]=1
@@ -1241,31 +1264,44 @@ def greedy_place(A,out_graph,s,f,g,out_neighbors,in_graph,in_neighbors,n,neighbo
 			#need all of v's incoming neighbors to compute the update to the connectivity list
 			conn_list = update_conn_list(conn_list, in_graph, v, S, in_neighbors, increment_update, decrement_update)
 	assert(len(S) + len(S_comp)==n)
-	return (S,S_comp,conn_list,bitS,bitS_comp,in_neighbors,in_graph)
+	return (S,S_comp,conn_list,bitS,bitS_comp,in_neighbors,in_graph,out_neighbors,out_graph)
 
 
 
 
 
 
-def grasp(A,out_graph,s,k,f,f_global,g,out_neighbors,in_graph,in_neighbors,sub_neighborhood_size):
-	#A is entire adjacency matrix, ith row is connectivity of node i to all others
-	#ith row of out_graph is connectivity of node i to it's neighbors in out_neighbors
+def grasp(W,out_graph,s,k,f,f_global,g,out_neighbors,in_graph,in_neighbors,sub_neighborhood_size):
+
+	'''Generate approximate maximizer solution to g composed with f_global over all cuts
+
+	Return bipartition of nodes
+
+	Args:
+		W - weight matrix 
+		out_graph - directed sub-graph of bi-directed graph defined by W 
+		s - nodes to intialize greedy placement 
+		k - number of grasp iterations 
+		f - local objective, used in local search
+		f_global - global objective
+		g - function objectives (local and global) are composed with 
+		out_neighbors - list of lists with vth list containing the outgoing neighbors of v 
+		in_graph - list of lists with the vth list containing the connectivity of v to its
+			incoming neighbors 
+		in_neighbors - list of lists with the vth list containing the incoming neighbors of v 
+		sub_neighborhood_size - new number of outgoing neighbors for each node 
+			(for subsampling the current out_graph, 
+			could be smaller then current number of outgoing neighbors)
+	'''
+
 	n = out_graph.shape[0]
 	neighborhood_size = out_graph.shape[1]
-	#A_sub only contains connectivity of v to their neighbors
 	for i in range(k):
 		random.seed(datetime.now())
-		#Place s nodes randomly into disjoint sets
-		#S,S_comp. Place ramining n-s 
-		#nodes greedily by maximizing g(f(v,Q)) over Q in
-		#taking S or S_comp. S,S_comp
-		#at the end consist of all n nodes.
-		(S,S_comp,conn_list,bitS,bitS_comp,in_neighbors,in_graph) = greedy_place(A,out_graph,s,f,g,out_neighbors,in_graph,in_neighbors,n,neighborhood_size,sub_neighborhood_size)
-		init_score = score = g(f_global(A,S,S_comp))
-		#make local improvements by swapping nodes v by maximizing f(S,S_comp)
-		(S,S_comp) = local_cut_improvement(A,S,S_comp,n,in_graph,f,g,f_global,conn_list,bitS,bitS_comp,in_neighbors)
-		score = g(f_global(A,S,S_comp))
+		(S,S_comp,conn_list,bitS,bitS_comp,in_neighbors,in_graph,out_neighbors,out_graph) = greedy_place(W,out_graph,s,f,g,out_neighbors,in_graph,in_neighbors,n,neighborhood_size,sub_neighborhood_size)
+		init_score = score = g(f_global(W,S,S_comp))
+		(S,S_comp) = local_cut_improvement(W,S,S_comp,n,in_graph,f,g,f_global,conn_list,bitS,bitS_comp,in_neighbors)
+		score = g(f_global(W,S,S_comp))
 		if i == 0:
 			S_star = S
 			S_comp_star = S_comp 
